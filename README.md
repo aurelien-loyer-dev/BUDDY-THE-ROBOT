@@ -16,7 +16,9 @@ App Android pour le robot Buddy (Blue Frog Robotics), sous BuddyOS (Android 9).
 Buddy reste immobile. Deux fonctionnalités tournent en parallèle dans `MainActivity` :
 
 - **Q&A vocal** : boucle STT (Google, français) → [Groq](https://groq.com) (`llama-3.3-70b-versatile`) → TTS, avec historique de conversation.
-- **Scan QR code** : `BuddySDK.Vision` (module natif du SDK, caméra pilotée par BuddyCore via AIDL — pas d'accès direct à l'API Camera Android, donc pas de permission `CAMERA` à demander). `startCamera()` puis polling de `getListOfQRCodes()` toutes les 400ms ; Buddy annonce à voix haute le contenu de tout QR code détecté (cooldown de 5s pour éviter de répéter le même code en boucle tant qu'il reste dans le champ de la caméra).
+- **Scan de marqueurs ArUco** : `BuddySDK.Vision` (module natif du SDK, caméra pilotée par BuddyCore via AIDL — pas d'accès direct à l'API Camera Android, donc pas de permission `CAMERA` à demander). `startCamera()` puis polling de `getListOfArucos(ArucoDictionary.DICT_4X4_50)` toutes les 400ms ; Buddy annonce à voix haute le numéro du marqueur détecté (cooldown de 5s pour éviter de répéter le même en boucle tant qu'il reste dans le champ de la caméra).
+
+  On est passés de QR codes génériques à des marqueurs ArUco (dictionnaire `DICT_4X4_50`) car la détection QR générique (OpenCV/WeChat, via `getListOfQRCodes()`) ne détectait rien de fiable en test réel, et les marqueurs ArUco sont conçus pour la robotique (détection plus robuste) et retournent directement un numéro — exactement ce qu'on veut annoncer. Le dictionnaire `ArucoDictionary` supporte aussi des variantes AprilTag (`DICT_APRILTAG_16h5/25h9/36h10/36h11`) via la même API si besoin un jour.
 
 ## Connexion au robot (ADB WiFi)
 

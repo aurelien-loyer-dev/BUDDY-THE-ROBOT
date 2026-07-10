@@ -9,6 +9,7 @@ import com.bfr.buddy.speech.shared.STTResultsData
 import com.bfr.buddy.ui.shared.FacialExpression
 import com.bfr.buddy.ui.shared.LabialExpression
 import com.bfr.buddy.vision.shared.IVisionRsp
+import com.bfr.buddy.vision.shared.enums.ArucoDictionary
 import com.bfr.buddysdk.BuddyActivity
 import com.bfr.buddysdk.BuddySDK
 import okhttp3.MediaType.Companion.toMediaType
@@ -19,14 +20,15 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Activité principale de l'application Buddy pour le salon Epitech.
  *
  * Buddy reste immobile : deux fonctionnalités actives en parallèle —
  * une boucle de questions/réponses vocales (STT → Groq → TTS), et un
- * scan continu de QR codes (BuddySDK.Vision) qui annonce à voix haute
- * leur contenu.
+ * scan continu de marqueurs ArUco (BuddySDK.Vision) qui annonce à voix
+ * haute leur numéro.
  *
  * Hérite de BuddyActivity (jamais AppCompatActivity) pour recevoir le
  * cycle de vie du SDK. Tout appel à BuddySDK doit se faire dans
@@ -41,9 +43,10 @@ class MainActivity : BuddyActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var isPaused = false
 
-    private var qrScanningActive = false
-    private var lastQrValue: String? = null
-    private var lastQrAnnouncedAt = 0L
+    private var arucoScanningActive = false
+    private var lastArucoId: Int? = null
+    private var lastArucoAnnouncedAt = 0L
+    private val pendingArucoId = AtomicReference<Int?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,7 +64,7 @@ class MainActivity : BuddyActivity() {
     }
 
     override fun onDestroy() {
-        qrScanningActive = false
+        arucoScanningActive = false
         BuddySDK.Vision.stopCamera(object : IVisionRsp.Stub() {
             override fun onSuccess(p0: String?) {}
             override fun onFailed(p0: String?) {}
@@ -73,41 +76,46 @@ class MainActivity : BuddyActivity() {
         BuddySDK.UI.setViewAsFace(findViewById(R.id.view_face))
         BuddySDK.UI.setMood(FacialExpression.NEUTRAL, 0.5, null)
 
-        startQrScanner()
+        startArucoScanner()
         Thread { startConversationLoop() }.start()
     }
 
-    // --- Scan QR code (BuddySDK.Vision) ---
+    // --- Scan de marqueurs ArUco (BuddySDK.Vision) ---
 
-    private fun startQrScanner() {
+    private fun startArucoScanner() {
         BuddySDK.Vision.startCamera(object : IVisionRsp.Stub() {
             override fun onSuccess(p0: String?) {
-                qrScanningActive = true
-                Thread { qrPollingLoop() }.start()
+                arucoScanningActive = true
+                Thread { arucoPollingLoop() }.start()
             }
 
             override fun onFailed(p0: String?) {
-                // Caméra indisponible : le scan QR est simplement désactivé.
+                // Caméra indisponible : le scan est simplement désactivé.
             }
         })
     }
 
-    private fun qrPollingLoop() {
-        while (qrScanningActive) {
-            val value = BuddySDK.Vision.getListOfQRCodes().firstOrNull()?.data
-            if (value != null) onQrDetected(value)
-            Thread.sleep(QR_POLL_INTERVAL_MS)
+    private fun arucoPollingLoop() {
+        while (arucoScanningActive) {
+            val marker = BuddySDK.Vision.getListOfArucos(ArucoDictionary.DICT_4X4_50).firstOrNull()
+            if (marker != null) onArucoDetected(marker.id)
+            Thread.sleep(ARUCO_POLL_INTERVAL_MS)
         }
     }
 
-    private fun onQrDetected(value: String) {
+    /**
+     * Marque le marqueur comme "à annoncer" plutôt que de parler immédiatement :
+     * la boucle Q&A (STT/TTS) est occupée la plupart du temps, donc annoncer ici
+     * directement finirait presque toujours ignoré. C'est la boucle de
+     * conversation qui délivre l'annonce dès qu'elle redevient libre.
+     */
+    private fun onArucoDetected(id: Int) {
         val now = System.currentTimeMillis()
-        if (value == lastQrValue && now - lastQrAnnouncedAt < QR_COOLDOWN_MS) return
-        if (isSpeaking.get() || isListening.get()) return
+        if (id == lastArucoId && now - lastArucoAnnouncedAt < ARUCO_COOLDOWN_MS) return
 
-        lastQrValue = value
-        lastQrAnnouncedAt = now
-        speak("J'ai scanné le QR code : $value") {}
+        lastArucoId = id
+        lastArucoAnnouncedAt = now
+        pendingArucoId.set(id)
     }
 
     // --- Parole ---
@@ -151,12 +159,15 @@ class MainActivity : BuddyActivity() {
         } catch (e: Exception) {
             // Warmup best-effort : si ça échoue, le premier vrai appel STT sera juste plus lent.
         }
-        speakSync("Bonjour ! Je suis Buddy, le robot d'Epitech. Posez-moi une question, ou montrez-moi un QR code !")
+        speakSync("Bonjour ! Je suis Buddy, le robot d'Epitech. Posez-moi une question, ou montrez-moi un marqueur !")
 
         while (true) {
             if (isPaused) {
                 Thread.sleep(500)
                 continue
+            }
+            pendingArucoId.getAndSet(null)?.let { id ->
+                speakSync("J'ai détecté le marqueur numéro $id")
             }
             mainHandler.post { BuddySDK.UI.setMood(FacialExpression.LISTENING, 0.5, null) }
             val heard = listenOnce()
@@ -242,7 +253,7 @@ class MainActivity : BuddyActivity() {
     }
 
     companion object {
-        private const val QR_POLL_INTERVAL_MS = 400L
-        private const val QR_COOLDOWN_MS = 5000L
+        private const val ARUCO_POLL_INTERVAL_MS = 400L
+        private const val ARUCO_COOLDOWN_MS = 5000L
     }
 }
