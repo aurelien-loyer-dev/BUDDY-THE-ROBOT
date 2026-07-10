@@ -1,0 +1,5 @@
+sdk.dir=/Users/YOUR_USERNAME/Library/Android/sdk
+
+# Buddy SDK private Maven repo (Blue Frog Robotics Artifactory)
+buddy.repo.username=your.email@example.com
+buddy.repo.password=REPLACE_ME
