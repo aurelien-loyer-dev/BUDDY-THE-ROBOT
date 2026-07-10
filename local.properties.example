@@ -1,4 +1,7 @@
-sdk.dir=/Users/YOUR_USERNAME/Library/Android/sdk
+# sdk.dir est renseigné automatiquement par Android Studio à l'ouverture du projet.
+# Sinon, décommente la ligne correspondant à ton OS :
+# macOS : sdk.dir=/Users/YOUR_USERNAME/Library/Android/sdk
+# Linux : sdk.dir=/home/YOUR_USERNAME/Android/Sdk
 
 # Buddy SDK private Maven repo (Blue Frog Robotics Artifactory)
 buddy.repo.username=your.email@example.com
