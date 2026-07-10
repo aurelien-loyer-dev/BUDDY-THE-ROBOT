@@ -6,3 +6,6 @@
 # Buddy SDK private Maven repo (Blue Frog Robotics Artifactory)
 buddy.repo.username=your.email@example.com
 buddy.repo.password=REPLACE_ME
+
+# Clé API Groq (Q&A), injectée dans BuildConfig.GROQ_API_KEY — jamais en dur dans le code
+groq.api.key=REPLACE_ME

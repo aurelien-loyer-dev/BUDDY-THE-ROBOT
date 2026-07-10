@@ -12,14 +12,24 @@ val localProps = Properties().apply {
 
 android {
     namespace = "com.example.buddyug"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.buddyug"
         minSdk = 28
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
+
+        buildConfigField(
+            "String",
+            "GROQ_API_KEY",
+            "\"${localProps.getProperty("groq.api.key", "")}\""
+        )
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     buildTypes {
@@ -50,4 +60,7 @@ dependencies {
     implementation("com.bluefrogrobotics.buddy:BuddySDK:2.4+")
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
+
+    // Appels à l'API Groq (Q&A)
+    implementation("com.squareup.okhttp3:okhttp:5.4.0")
 }

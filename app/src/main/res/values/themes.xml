@@ -1,4 +1,0 @@
-<resources>
-    <!-- Theme.Buddy is provided by the BuddySDK. Without inheriting from it, the face won't render. -->
-    <style name="BuddyTheme" parent="Theme.Buddy" />
-</resources>
