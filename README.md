@@ -35,3 +35,11 @@ adb -s <ip>:5555 shell "echo '{
 }' > /sdcard/Configs/Applications/<applicationId>/config.json"
 adb -s <ip>:5555 reboot
 ```
+
+## Documentation du code
+
+Le code est commenté au format KDoc. Pour générer la doc HTML avec [Dokka](https://github.com/Kotlin/dokka) :
+
+```bash
+./gradlew dokkaHtml   # sortie dans app/build/dokka/html/index.html
+```

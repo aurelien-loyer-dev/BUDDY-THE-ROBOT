@@ -1,11 +1,19 @@
-*.iml
-.gradle
-/local.properties
-.idea/
-.DS_Store
-/build
-/app/build
-/captures
-.externalNativeBuildCUniversal
-.cxx
+# Gradle
+.gradle/
+/build/
+/app/build/
+/captures/
+
+# Local config (contient les identifiants du repo Maven privé BFR)
 local.properties
+
+# Android Studio / IntelliJ
+*.iml
+.idea/
+
+# Native build
+.cxx/
+.externalNativeBuildCUniversal
+
+# macOS
+.DS_Store
