@@ -57,6 +57,15 @@ class MainActivity : BuddyActivity() {
         BuddySDK.UI.setViewAsFace(findViewById(R.id.view_face))
         BuddySDK.UI.setMood(FacialExpression.NEUTRAL, 0.5, null)
 
+        // Le hotword "Ok Buddy" (moteur Cerence/VoCon) déclenche une mission
+        // Companion prioritaire qui coupe notre activité. On tente de
+        // désactiver ce moteur pour que l'app ne soit plus interrompue.
+        try {
+            BuddySDK.Speech.unloadVoCon()
+        } catch (e: Exception) {
+            // Best-effort : si l'appel échoue, on continue sans bloquer le démarrage.
+        }
+
         Thread { startConversationLoop() }.start()
     }
 
@@ -101,7 +110,7 @@ class MainActivity : BuddyActivity() {
         } catch (e: Exception) {
             // Warmup best-effort : si ça échoue, le premier vrai appel STT sera juste plus lent.
         }
-        speakSync("Bonjour ! Je suis Buddy, le robot d'Epitech. Je suis là pour répondre à toutes vos questions sur la tech !")
+        speakSync("Bonjour ! Je suis Buddy, le robot d'Epitech La Réunion. Je suis là pour répondre à toutes vos questions sur la tech !")
 
         while (true) {
             if (isPaused) {
