@@ -8,8 +8,6 @@ import com.bfr.buddy.speech.shared.ITTSCallback
 import com.bfr.buddy.speech.shared.STTResultsData
 import com.bfr.buddy.ui.shared.FacialExpression
 import com.bfr.buddy.ui.shared.LabialExpression
-import com.bfr.buddy.vision.shared.IVisionRsp
-import com.bfr.buddy.vision.shared.enums.ArucoDictionary
 import com.bfr.buddysdk.BuddyActivity
 import com.bfr.buddysdk.BuddySDK
 import okhttp3.MediaType.Companion.toMediaType
@@ -20,15 +18,12 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Activité principale de l'application Buddy pour le salon Epitech.
  *
- * Buddy reste immobile : deux fonctionnalités actives en parallèle —
- * une boucle de questions/réponses vocales (STT → Groq → TTS), et un
- * scan continu de marqueurs ArUco (BuddySDK.Vision) qui annonce à voix
- * haute leur numéro.
+ * Buddy reste immobile : boucle de questions/réponses vocales
+ * (STT → Groq → TTS).
  *
  * Hérite de BuddyActivity (jamais AppCompatActivity) pour recevoir le
  * cycle de vie du SDK. Tout appel à BuddySDK doit se faire dans
@@ -42,11 +37,6 @@ class MainActivity : BuddyActivity() {
     private val isSpeaking = AtomicBoolean(false)
     private val mainHandler = Handler(Looper.getMainLooper())
     private var isPaused = false
-
-    private var arucoScanningActive = false
-    private var lastArucoId: Int? = null
-    private var lastArucoAnnouncedAt = 0L
-    private val pendingArucoId = AtomicReference<Int?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,59 +53,11 @@ class MainActivity : BuddyActivity() {
         isPaused = true
     }
 
-    override fun onDestroy() {
-        arucoScanningActive = false
-        BuddySDK.Vision.stopCamera(object : IVisionRsp.Stub() {
-            override fun onSuccess(p0: String?) {}
-            override fun onFailed(p0: String?) {}
-        })
-        super.onDestroy()
-    }
-
     override fun onSDKReady() {
         BuddySDK.UI.setViewAsFace(findViewById(R.id.view_face))
         BuddySDK.UI.setMood(FacialExpression.NEUTRAL, 0.5, null)
 
-        startArucoScanner()
         Thread { startConversationLoop() }.start()
-    }
-
-    // --- Scan de marqueurs ArUco (BuddySDK.Vision) ---
-
-    private fun startArucoScanner() {
-        BuddySDK.Vision.startCamera(object : IVisionRsp.Stub() {
-            override fun onSuccess(p0: String?) {
-                arucoScanningActive = true
-                Thread { arucoPollingLoop() }.start()
-            }
-
-            override fun onFailed(p0: String?) {
-                // Caméra indisponible : le scan est simplement désactivé.
-            }
-        })
-    }
-
-    private fun arucoPollingLoop() {
-        while (arucoScanningActive) {
-            val marker = BuddySDK.Vision.getListOfArucos(ArucoDictionary.DICT_4X4_50).firstOrNull()
-            if (marker != null) onArucoDetected(marker.id)
-            Thread.sleep(ARUCO_POLL_INTERVAL_MS)
-        }
-    }
-
-    /**
-     * Marque le marqueur comme "à annoncer" plutôt que de parler immédiatement :
-     * la boucle Q&A (STT/TTS) est occupée la plupart du temps, donc annoncer ici
-     * directement finirait presque toujours ignoré. C'est la boucle de
-     * conversation qui délivre l'annonce dès qu'elle redevient libre.
-     */
-    private fun onArucoDetected(id: Int) {
-        val now = System.currentTimeMillis()
-        if (id == lastArucoId && now - lastArucoAnnouncedAt < ARUCO_COOLDOWN_MS) return
-
-        lastArucoId = id
-        lastArucoAnnouncedAt = now
-        pendingArucoId.set(id)
     }
 
     // --- Parole ---
@@ -159,15 +101,12 @@ class MainActivity : BuddyActivity() {
         } catch (e: Exception) {
             // Warmup best-effort : si ça échoue, le premier vrai appel STT sera juste plus lent.
         }
-        speakSync("Bonjour ! Je suis Buddy, le robot d'Epitech. Posez-moi une question, ou montrez-moi un marqueur !")
+        speakSync("Bonjour ! Je suis Buddy, le robot d'Epitech. Je suis là pour répondre à toutes vos questions sur la tech !")
 
         while (true) {
             if (isPaused) {
                 Thread.sleep(500)
                 continue
-            }
-            pendingArucoId.getAndSet(null)?.let { id ->
-                speakSync("J'ai détecté le marqueur numéro $id")
             }
             mainHandler.post { BuddySDK.UI.setMood(FacialExpression.LISTENING, 0.5, null) }
             val heard = listenOnce()
@@ -218,11 +157,11 @@ class MainActivity : BuddyActivity() {
                     put("role", "system")
                     put(
                         "content",
-                        "Tu es Buddy, le robot mascotte d'Epitech, present sur un salon a la " +
-                            "prefecture de La Reunion. Tu es immobile. Tu es sympa, passionne de tech " +
-                            "et motivant. Tu detectes automatiquement la langue parlee et tu reponds " +
-                            "TOUJOURS dans cette meme langue. Tu reponds de facon naturelle pour etre " +
-                            "dit a voix haute, sans markdown ni emoticones. Maximum 2-3 phrases."
+                        "Tu es Buddy, le robot mascotte d'Epitech La Reunion, present sur un salon a la prefecture de La Reunion. Tu es immobile mais tu accueilles et discutes avec les visiteurs. Tu es sympa, passionne de tech, taquin et motivant." +
+                        " EPITECH : Epitech est une ecole d'expertise informatique et d'innovation, presente dans plus de 15 villes en France et a l'international. La pedagogie est 100% par projets et par la pratique, sans cours magistraux. Les etudiants apprennent en codant, en echouant et en recommencant, entierement en autonomie et en equipe. La formation dure 5 ans (Bachelor + MSc Pro) et forme des experts en developpement logiciel, cybersecurite, intelligence artificielle, reseaux et management de projet tech. Chaque annee, les etudiants realisent des projets concrets : systemes d'exploitation, moteurs 3D, compilateurs, IA, applications mobiles, robots, jeux video et bien plus. Le campus de La Reunion est situe a Saint-Andre." +
+                        " LE HUB EPITECH : Le Hub est l'espace d'innovation du campus. Il contient un espace serveur, un espace Robocar pour les voitures autonomes avec IA, un espace LeRobot pour les bras robotiques et l'intelligence artificielle, cinq imprimantes 3D, un espace d'innovation avec de la soudure et de l'electronique, et un espace de stream pour les lives et podcasts. C'est la que les etudiants construisent leurs projets les plus ambitieux." +
+                        " LA REUNION ET LE CONTEXTE : La Reunion est un departement et region d'outre-mer francais dans l'ocean Indien, reconnue pour son dynamisme, sa diversite culturelle et son potentiel d'innovation numerique. La prefecture de La Reunion est Saint-Denis. Ce salon a la prefecture vise a presenter les acteurs de l'innovation et du numerique de l'ile." +
+                        " COMPORTEMENT : Tu detectes automatiquement la langue parlee (francais, anglais, creole reunionnais ou autre) et tu reponds TOUJOURS dans cette meme langue. Tu reponds de facon naturelle pour etre dit a voix haute, sans markdown ni emoticones, sans chiffres ecrits en lettres excessivement. Maximum 2-3 phrases. Tu peux parler d'Epitech, de ses formations, de ses debouches, du Hub, de la tech en general, de La Reunion, ou simplement discuter avec les visiteurs. Si on te demande comment s'inscrire a Epitech, dis de visiter epitech.eu ou de parler au stand Epitech present sur le salon."
                     )
                 })
                 for (i in 0 until conversationHistory.length()) put(conversationHistory.getJSONObject(i))
@@ -248,12 +187,7 @@ class MainActivity : BuddyActivity() {
             })
             msg
         } catch (e: Exception) {
-            "Desole, je n'ai pas pu repondre."
+            "Désolé, je n'ai pas pu répondre, veuillez contacter un admin."
         }
-    }
-
-    companion object {
-        private const val ARUCO_POLL_INTERVAL_MS = 400L
-        private const val ARUCO_COOLDOWN_MS = 5000L
     }
 }
