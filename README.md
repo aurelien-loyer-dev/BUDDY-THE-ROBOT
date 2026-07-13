@@ -35,11 +35,16 @@ adb -s <ip>:5555 shell "echo '{
   \"Name\": \"<NomApp>\",
   \"Package\": \"<applicationId>\",
   \"ShowInMenu\": true,
-  \"DevOnly\": false,
-  \"companionMode\": \"autonomous\"
+  \"DevOnly\": false
 }' > /sdcard/Configs/Applications/<applicationId>/config.json"
 adb -s <ip>:5555 reboot
 ```
+
+Le champ `companionMode: autonomous` évoqué dans certains guides BFR n'existe pas dans le SDK réel (`CompanionMode` n'a que `NORMAL`/`EMPTY`, confirmé par décompilation) et aucune autre appli du device ne l'utilise — retiré ici. Le hotword "Ok Buddy" (moteur Cerence/VoCon) qui coupait l'app est géré côté code via `BuddySDK.Speech.unloadVoCon()` dans `onSDKReady`.
+
+## Limitations connues
+
+Le scan de marqueurs (QR codes puis marqueurs ArUco via `BuddySDK.Vision.getListOfArucos()`) a été tenté et abandonné après une session de test approfondie : détection instable même avec un dictionnaire robuste (`DICT_6X6_250`) et confirmation multi-frames. Piste la plus probable : `BuddyCore` fait tourner en permanence son propre tracker de personnes (`_VISION Person tracker`) sur la même caméra, en concurrence avec toute détection custom. La tâche Companion native `realign` (basée sur de la vraie détection AprilTag interne) existe et fonctionne, mais fait physiquement tourner le robot pour s'aligner — incompatible avec un robot immobile — et ne renvoie pas l'ID détecté de façon exploitable.
 
 ## Documentation du code
 
