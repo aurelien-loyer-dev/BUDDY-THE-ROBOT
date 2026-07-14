@@ -1,6 +1,5 @@
 package com.example.buddyug
 
-import android.graphics.Bitmap
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -21,8 +20,6 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.File
-import java.io.FileOutputStream
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -341,18 +338,6 @@ class MainActivity : BuddyActivity() {
         private const val TAG = "BuddyUG"
         private const val ARUCO_POLL_INTERVAL_MS = 400L
         private const val ARUCO_COOLDOWN_MS = 5000L
-        private const val ARUCO_CONFIRM_STREAK = 2
-        private const val FRAME_DUMP_INTERVAL_MS = 4000L
-
-        // Dictionnaires sondés en mode diagnostic : celui des marqueurs
-        // imprimés est inconnu, et la station de charge utilise de l'AprilTag
-        // (vu via la tâche realign). On couvre les candidats plausibles.
-        private val DIAG_DICTIONARIES = listOf(
-            ArucoDictionary.DICT_4X4_50,
-            ArucoDictionary.DICT_6X6_250,
-            ArucoDictionary.DICT_ARUCO_ORIGINA,
-            ArucoDictionary.DICT_APRILTAG_36h11,
-            ArucoDictionary.DICT_APRILTAG_16h5
-        )
+        private const val ARUCO_CONFIRM_STREAK = 3
     }
 }
