@@ -50,6 +50,8 @@ class MainActivity : BuddyActivity() {
     private var lastArucoAnnouncedAt = 0L
     private val pendingArucoId = AtomicReference<Int?>(null)
 
+    private var stateServer: StateServer? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -71,6 +73,7 @@ class MainActivity : BuddyActivity() {
             override fun onSuccess(p0: String?) {}
             override fun onFailed(p0: String?) {}
         })
+        stateServer?.stop()
         super.onDestroy()
     }
 
@@ -98,8 +101,27 @@ class MainActivity : BuddyActivity() {
             // Best-effort : si l'appel échoue, on continue sans bloquer le démarrage.
         }
 
+        // Écran de diffusion du salon : http://<ip_buddy>:8080/
+        try {
+            stateServer = StateServer(this, STATE_SERVER_PORT).also { it.start() }
+            Log.i(TAG, "StateServer démarré sur le port $STATE_SERVER_PORT")
+        } catch (e: Exception) {
+            Log.e(TAG, "Échec démarrage StateServer", e)
+        }
+
         startArucoScanner()
         Thread { startConversationLoop() }.start()
+    }
+
+    private fun broadcastState(state: String, heard: String? = null, response: String? = null, marker: Int? = null) {
+        val server = stateServer ?: return
+        server.broadcast(JSONObject().apply {
+            put("state", state)
+            put("heard", heard ?: JSONObject.NULL)
+            put("response", response ?: JSONObject.NULL)
+            put("marker", marker ?: JSONObject.NULL)
+            put("timestamp", System.currentTimeMillis())
+        })
     }
 
     // --- Scan de marqueurs ArUco (BuddySDK.Vision) ---
@@ -183,6 +205,7 @@ class MainActivity : BuddyActivity() {
         lastArucoAnnouncedAt = now
         Log.i(TAG, "Marqueur $id confirmé, mise en attente + interruption")
         pendingArucoId.set(id)
+        broadcastState("marker", marker = id)
 
         BuddySDK.Speech.stopSpeaking()
         currentSttTask?.stop()
@@ -229,7 +252,9 @@ class MainActivity : BuddyActivity() {
             // Warmup best-effort : si ça échoue (ex: focus micro pas encore
             // possédé par l'app), le premier vrai appel STT sera juste plus lent.
         }
-        speakSync("Bonjour ! Je suis Buddy, le robot d'Epitech La Réunion. Je suis là pour répondre à toutes vos questions sur la tech !")
+        val greeting = "Bonjour ! Je suis Buddy, le robot d'Epitech La Réunion. Je suis là pour répondre à toutes vos questions sur la tech !"
+        broadcastState("speaking", response = greeting)
+        speakSync(greeting)
 
         while (true) {
             try {
@@ -239,17 +264,24 @@ class MainActivity : BuddyActivity() {
                 }
                 pendingArucoId.getAndSet(null)?.let { id ->
                     Log.i(TAG, "Annonce du marqueur $id (délivrée depuis la boucle Q&A)")
-                    speakSync("J'ai scanné le marqueur numéro $id")
+                    val text = "J'ai scanné le marqueur numéro $id"
+                    broadcastState("speaking", response = text, marker = id)
+                    speakSync(text)
                 }
+                broadcastState("listening")
                 mainHandler.post { BuddySDK.UI.setMood(FacialExpression.LISTENING, 0.5, null) }
                 val heard = listenOnce()
                 if (heard.isNullOrBlank()) {
                     Thread.sleep(200)
                     continue
                 }
+                broadcastState("thinking", heard = heard)
                 mainHandler.post { BuddySDK.UI.setMood(FacialExpression.THINKING, 0.5, null) }
                 val response = askGroq(heard)
-                if (response.isNotBlank()) speakSync(response)
+                if (response.isNotBlank()) {
+                    broadcastState("speaking", heard = heard, response = response)
+                    speakSync(response)
+                }
             } catch (e: Exception) {
                 // Filet de sécurité : une exception SDK isolée (ex: "Focus not
                 // owned" si une autre appli Buddy rafle une ressource au même
@@ -339,5 +371,6 @@ class MainActivity : BuddyActivity() {
         private const val ARUCO_POLL_INTERVAL_MS = 400L
         private const val ARUCO_COOLDOWN_MS = 5000L
         private const val ARUCO_CONFIRM_STREAK = 3
+        private const val STATE_SERVER_PORT = 8080
     }
 }

@@ -63,4 +63,7 @@ dependencies {
 
     // Appels à l'API Groq (Q&A)
     implementation("com.squareup.okhttp3:okhttp:5.4.0")
+
+    // Serveur local embarqué (écran de diffusion en direct pour le salon)
+    implementation("org.nanohttpd:nanohttpd-websocket:2.3.1")
 }
