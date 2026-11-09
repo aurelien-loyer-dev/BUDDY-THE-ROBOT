@@ -62,6 +62,8 @@ class StateServer(private val context: Context, port: Int) : NanoWSD(port) {
         uri.endsWith(".js") -> "application/javascript"
         uri.endsWith(".css") -> "text/css"
         uri.endsWith(".json") -> "application/json"
+        uri.endsWith(".txt") -> "text/plain"
+        uri.endsWith(".woff2") -> "font/woff2"
         uri.endsWith(".svg") -> "image/svg+xml"
         uri.endsWith(".png") -> "image/png"
         uri.endsWith(".ico") -> "image/x-icon"

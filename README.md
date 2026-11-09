@@ -17,7 +17,7 @@ Buddy reste immobile. `MainActivity` fait tourner un robot conversationnel :
 
 - **Q&A vocal** : boucle STT (Google, français) → [Groq](https://groq.com) (`llama-3.3-70b-versatile`) → TTS, avec historique de conversation.
 - **Scan de marqueurs ArUco** : `BuddySDK.Vision.getListOfArucos(ArucoDictionary.DICT_4X4_50)` en polling (400ms), confirmation sur 3 détections consécutives pour éviter les faux positifs, annonce vocale du numéro détecté. Voir les commentaires dans `MainActivity.kt` pour l'historique du diagnostic (dictionnaire, permission `VISION`, tracker de personnes concurrent).
-- **Écran de diffusion en direct** (`display/`) : un mini-serveur HTTP + WebSocket embarqué (`StateServer.kt`, NanoHTTPD) sert une page React qui affiche en direct ce que Buddy entend/répond, pour un écran annexe au stand du salon. Voir la section dédiée plus bas.
+- **Écran de diffusion en direct** (`display/`) : un mini-serveur HTTP + WebSocket embarqué (`StateServer.kt`, NanoHTTPD) sert une page Next.js qui affiche en direct ce que Buddy entend/répond, pour un écran annexe au stand du salon. Voir la section dédiée plus bas.
 
 ## Connexion au robot (ADB WiFi)
 
@@ -44,29 +44,29 @@ adb -s <ip>:5555 reboot
 
 Le champ `companionMode: autonomous` évoqué dans certains guides BFR n'existe pas dans le SDK réel (`CompanionMode` n'a que `NORMAL`/`EMPTY`, confirmé par décompilation) et aucune autre appli du device ne l'utilise — retiré ici. Le hotword "Ok Buddy" (moteur Cerence/VoCon) qui coupait l'app est géré côté code via `BuddySDK.Speech.unloadVoCon()` dans `onSDKReady`.
 
-## Écran de diffusion (salon)
+## Écran de diffusion (Salon de l'Étudiant)
 
-Un écran annexe peut afficher en direct l'état de la conversation (écoute / réflexion / réponse, dernier marqueur scanné) — utile pour un public non-technique dans un salon bruyant qui ne sait pas toujours si Buddy a compris.
+Un écran annexe affiche en direct l'état de la conversation (écoute / réflexion / réponse, historique des derniers échanges, dernier marqueur scanné) — utile pour un public non-technique dans un salon bruyant qui ne sait pas toujours si Buddy a compris.
 
 **Architecture** : tout est servi par le robot lui-même, aucune autre machine n'a besoin de tourner pendant le salon.
 
 ```
 [Android App]  --state changes-->  [StateServer.kt : NanoHTTPD]
-                                     ├─ sert la page React (assets/web/)
+                                     ├─ sert la page Next.js (assets/web/)
                                      └─ diffuse l'état en WebSocket (/ws)
                                               |
                         http://<ip_buddy>:8080/  <-- navigateur de l'écran
 ```
 
-**Build de l'écran (`display/`, React + Vite + TypeScript)** :
+**Build de l'écran (`display/`, Next.js en export statique + TypeScript, charte graphique Epitech)** :
 
 ```bash
 cd display
 npm install
-npm run build
-rm -rf ../app/src/main/assets/web && mkdir -p ../app/src/main/assets/web
-cp -r dist/* ../app/src/main/assets/web/
+npm run android   # next build + copie de out/ vers app/src/main/assets/web/
 ```
+
+`app/build.gradle.kts` surcharge `ignoreAssetsPattern` : par défaut AAPT ignore les dossiers commençant par `_`, donc le `_next/` de Next.js ne serait pas embarqué.
 
 Puis rebuild/redéploie l'app Android normalement — la page est servie automatiquement.
 
@@ -74,7 +74,7 @@ Puis rebuild/redéploie l'app Android normalement — la page est servie automat
 
 ```bash
 cd display
-VITE_WS_HOST=<ip_buddy> npm run dev   # se connecte au StateServer du robot en direct
+NEXT_PUBLIC_WS_HOST=<ip_buddy> npm run dev   # se connecte au StateServer du robot en direct
 ```
 
 **Utilisation le jour du salon** : ouvrir un navigateur sur l'écran et naviguer vers `http://<ip_buddy>:8080/`. Reconnexion automatique si l'app ou le robot redémarre.

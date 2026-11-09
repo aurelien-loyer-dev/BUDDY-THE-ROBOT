@@ -28,6 +28,12 @@ android {
         )
     }
 
+    // Le pattern AAPT par défaut ignore les dossiers commençant par "_" :
+    // sans ça, le dossier _next/ de l'export Next.js n'est pas embarqué.
+    androidResources {
+        ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~"
+    }
+
     buildFeatures {
         buildConfig = true
     }
