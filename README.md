@@ -1,6 +1,6 @@
 # BUDDY-THE-ROBOT
 
-App Android pour le robot Buddy (Blue Frog Robotics), sous BuddyOS (Android 9).
+App Android pour le robot Buddy (Blue Frog Robotics), sous BuddyOS (Android 9), utilisée comme mascotte du stand Epitech La Réunion au **Salon de l'Étudiant**.
 
 ## Setup
 
@@ -15,8 +15,8 @@ App Android pour le robot Buddy (Blue Frog Robotics), sous BuddyOS (Android 9).
 
 Buddy reste immobile. `MainActivity` fait tourner un robot conversationnel :
 
-- **Q&A vocal** : boucle STT (Google, français) → [Groq](https://groq.com) (`llama-3.3-70b-versatile`) → TTS, avec historique de conversation.
-- **Scan de marqueurs ArUco** : `BuddySDK.Vision.getListOfArucos(ArucoDictionary.DICT_4X4_50)` en polling (400ms), confirmation sur 3 détections consécutives pour éviter les faux positifs, annonce vocale du numéro détecté. Voir les commentaires dans `MainActivity.kt` pour l'historique du diagnostic (dictionnaire, permission `VISION`, tracker de personnes concurrent).
+- **Q&A vocal** : boucle STT (Google, français) → [Groq](https://groq.com) (`llama-3.3-70b-versatile`) → TTS, avec historique de conversation. Le prompt système (`askGroq` dans `MainActivity.kt`) cible les lycéens, les étudiants en réorientation et leurs parents : présentation d'Epitech et du Hub, débouchés, ton tutoyant et motivant, réponse dans la langue du visiteur (français, anglais, créole…), 2-3 phrases maximum. **Il interdit d'inventer des chiffres** (tarifs, dates, places, salaires) : pour tout ce qui est administratif, Buddy renvoie vers l'équipe du stand ou epitech.eu. C'est le premier endroit à modifier pour un autre événement.
+- **Scan de marqueurs ArUco** : `BuddySDK.Vision.getListOfArucos(ArucoDictionary.DICT_4X4_50)` en polling (400ms), confirmation sur 3 détections consécutives pour éviter les faux positifs, le numéro détecté est diffusé à l'écran (l'annonce vocale est actuellement vide, donc désactivée). Voir les commentaires dans `MainActivity.kt` pour l'historique du diagnostic (dictionnaire, permission `VISION`, tracker de personnes concurrent).
 - **Écran de diffusion en direct** (`display/`) : un mini-serveur HTTP + WebSocket embarqué (`StateServer.kt`, NanoHTTPD) sert une page Next.js qui affiche en direct ce que Buddy entend/répond, pour un écran annexe au stand du salon. Voir la section dédiée plus bas.
 
 ## Connexion au robot (ADB WiFi)
@@ -58,6 +58,22 @@ Un écran annexe affiche en direct l'état de la conversation (écoute / réflex
                         http://<ip_buddy>:8080/  <-- navigateur de l'écran
 ```
 
+**Message WebSocket** (un par changement d'état, le dernier est renvoyé à chaque nouvelle connexion) :
+
+```json
+{ "state": "idle|listening|thinking|speaking|marker", "heard": "texte entendu ou null",
+  "response": "réponse de Buddy ou null", "marker": 5, "timestamp": 1794222094050 }
+```
+
+**Ce qu'affiche l'écran** (`display/app/page.tsx`, charte graphique Epitech) :
+- logo officiel Epitech (`display/public/epitech-logo.svg`, version blanche, à ne pas modifier selon la charte) et indicateur de connexion ;
+- l'état de Buddy, avec une couleur par état : vert Tech = écoute, orange Together = réflexion, rose Tomorrow = réponse ;
+- la question entendue et la réponse en grand ; pendant la réflexion, la nouvelle question remplace l'échange précédent, qui passe dans l'historique ;
+- un historique des derniers échanges, gardé côté navigateur et dédoublonné par `timestamp` (un rechargement de la page le vide) ;
+- le numéro du dernier marqueur scanné, affiché 6 s.
+
+Charte appliquée : bleu `#013afb`, triptyque `#00ff97` / `#ff5f3a` / `#ff1ef7`, polices Anton (titres), IBM Plex Sans (texte) et Space Mono (éléments tech), grille blueprint, pixels blancs à 50 %, underscore en fin de titre, balises `< … />`. Les polices sont embarquées dans l'export : l'écran n'a pas besoin d'Internet. Mise en page vérifiée en 1920×1080, en 1366×768 et sur mobile.
+
 **Build de l'écran (`display/`, Next.js en export statique + TypeScript, charte graphique Epitech)** :
 
 ```bash
@@ -78,6 +94,10 @@ NEXT_PUBLIC_WS_HOST=<ip_buddy> npm run dev   # se connecte au StateServer du rob
 ```
 
 **Utilisation le jour du salon** : ouvrir un navigateur sur l'écran et naviguer vers `http://<ip_buddy>:8080/`. Reconnexion automatique si l'app ou le robot redémarre.
+
+## Pistes
+
+- **Jeu avec les marqueurs** (idée, pas commencé) : « Quel profil tech es-tu ? ». Buddy pose 4-5 questions, le visiteur répond en montrant des cartes ArUco A/B/C/D (`DICT_4X4_50`, ex. ID 0-3, plus une carte « Jouer »), et l'écran affiche les questions puis le profil obtenu (Cyber, IA & Data, Dev Jeu & 3D, Robotique & Hub). Variante : quiz Vrai/Faux avec score et classement du jour. Côté code, il faudrait un mode jeu qui met la boucle Q&A en pause, des questions écrites en dur (pas générées par Groq) et quelques champs en plus dans le message WebSocket.
 
 ## Limitations connues
 

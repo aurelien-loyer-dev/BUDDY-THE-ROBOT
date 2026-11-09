@@ -9,7 +9,7 @@ import java.io.IOException
 /**
  * Serveur HTTP + WebSocket embarqué pour l'écran de diffusion du salon.
  *
- * Sert la page React statique (`assets/web/`) et diffuse en direct l'état
+ * Sert la page Next.js exportée en statique (`assets/web/`, build : `cd display && npm run android`) et diffuse en direct l'état
  * de la conversation (écoute / réflexion / parole, texte entendu, réponse,
  * marqueur scanné) à tout navigateur connecté sur `http://<ip_buddy>:PORT/`.
  * Aucune dépendance externe : l'écran n'a besoin que d'un navigateur pointé
@@ -52,7 +52,7 @@ class StateServer(private val context: Context, port: Int) : NanoWSD(port) {
             newFixedLengthResponse(
                 NanoHTTPD.Response.Status.NOT_FOUND,
                 "text/plain",
-                "404 Not Found: $uri (page React pas encore buildée dans assets/web ?)"
+                "404 Not Found: $uri (page pas encore exportée dans assets/web ? lancer `npm run android` dans display/)"
             )
         }
     }
