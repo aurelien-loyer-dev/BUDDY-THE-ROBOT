@@ -9,3 +9,6 @@ buddy.repo.password=REPLACE_ME
 
 # Clé API Groq (Q&A), injectée dans BuildConfig.GROQ_API_KEY — jamais en dur dans le code
 groq.api.key=REPLACE_ME
+
+# IP du robot sur le WiFi, utilisée par le script ./buddy
+buddy.ip=192.168.1.XX

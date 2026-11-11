@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# Pilotage de Buddy depuis le Mac : ./buddy deploy|restart|logs|status|screen
+# IP du robot : buddy.ip=<ip> dans local.properties (ou variable BUDDY_IP).
+set -euo pipefail
+cd "$(dirname "$0")"
+
+PKG=com.example.buddyug
+PORT=8080
+IP="${BUDDY_IP:-$(sed -n 's/^buddy\.ip=//p' local.properties 2>/dev/null | tr -d '[:space:]')}"
+[ -n "$IP" ] || { echo "IP de Buddy inconnue : ajoute buddy.ip=<ip> dans local.properties (ou BUDDY_IP=<ip> ./buddy ...)"; exit 1; }
+DEV="$IP:5555"
+URL="http://$IP:$PORT/"
+
+connect() {
+  # Test du port d'abord : `adb connect` vers une IP morte bloque ~75 s.
+  # (sur macOS, seul -G borne la connexion ; -w ne la borne que sous Linux)
+  if [ "$(uname)" = Darwin ]; then t=(-G 3); else t=(-w 3); fi
+  nc -z "${t[@]}" "$IP" 5555 2>/dev/null || { echo "Buddy injoignable sur $DEV (même WiFi ? robot allumé ? ADB WiFi actif ?)"; exit 1; }
+  adb connect "$DEV" >/dev/null 2>&1 || true
+  adb -s "$DEV" get-state >/dev/null 2>&1 || { echo "Buddy injoignable sur $DEV (même WiFi ? ADB WiFi actif ?)"; exit 1; }
+}
+
+wait_ready() {
+  printf "Attente de l'app"
+  for _ in $(seq 1 60); do # ~5 min max
+    if curl -s -m 3 -o /dev/null "$URL"; then echo " : prête → $URL"; return 0; fi
+    adb connect "$DEV" >/dev/null 2>&1 || true
+    printf "."; sleep 5
+  done
+  echo; echo "L'app ne répond pas sur $URL : regarde ./buddy logs"; exit 1
+}
+
+# BuddyCore refuse un lancement via `am start` ("restarted by companion") :
+# le seul relancement fiable est un reboot, l'app ayant Autostart: true.
+restart() {
+  connect
+  echo "Redémarrage de Buddy..."
+  adb -s "$DEV" reboot
+  sleep 15 # laisse le serveur de l'ancienne instance tomber avant d'attendre le nouveau
+  wait_ready
+}
+
+open_screen() {
+  if command -v open >/dev/null; then open "$URL"; else xdg-open "$URL"; fi
+}
+
+case "${1:-}" in
+  deploy)
+    connect
+    (cd display && { [ -d node_modules ] || npm install; } && npm run android)
+    ./gradlew installDebug -q
+    restart
+    open_screen
+    ;;
+  restart) restart ;;
+  logs)
+    connect
+    adb -s "$DEV" logcat -s 'BuddyUG:*' 'AndroidRuntime:E'
+    ;;
+  status)
+    connect
+    echo "Robot   : connecté ($DEV)"
+    pid=$(adb -s "$DEV" shell pidof "$PKG" | tr -d '\r' || true)
+    if [ -n "$pid" ]; then echo "App     : lancée (pid $pid)"; else echo "App     : arrêtée"; fi
+    code=$(curl -s -m 3 -o /dev/null -w '%{http_code}' "$URL" || true)
+    [ "$code" = 200 ] && echo "Écran   : OK → $URL" || echo "Écran   : injoignable ($URL)"
+    ;;
+  screen) open_screen ;;
+  *)
+    cat <<EOF
+Usage : ./buddy <commande>
+  deploy   build écran + APK, installe, redémarre Buddy, ouvre l'écran
+  restart  redémarre Buddy et attend que l'app soit prête
+  logs     logs de l'app en direct (Ctrl+C pour quitter)
+  status   robot connecté ? app lancée ? écran joignable ?
+  screen   ouvre $URL
+EOF
+    ;;
+esac
