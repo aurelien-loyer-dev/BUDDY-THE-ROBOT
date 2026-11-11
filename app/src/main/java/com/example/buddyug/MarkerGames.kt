@@ -57,7 +57,7 @@ val PROFILE_QUESTIONS = listOf(
     ProfileQuestion(
         "Le week-end, tu préfères…",
         listOf(
-            "bricoler ou réparer quelque chose" to Profile.ROBOT,
+            "faire du sport ou bricoler quelque chose" to Profile.ROBOT,
             "dessiner, filmer ou créer quelque chose" to Profile.DEV,
             "faire un escape game ou un jeu d'enquête" to Profile.CYBER,
             "regarder un documentaire qui explique le monde" to Profile.IA,

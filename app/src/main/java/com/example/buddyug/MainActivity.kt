@@ -102,20 +102,23 @@ class MainActivity : BuddyActivity() {
         // relancerait à chaque fois une nouvelle boucle Q&A en parallèle des
         // précédentes (jamais arrêtées), plusieurs threads concurrents se
         // battant pour les mêmes ressources micro/haut-parleur.
+        // Le hotword "Ok Buddy" (moteur Cerence/VoCon) déclenche une mission
+        // Companion WAKE_UP (« Punctual_listen_and_Eye_contact ») qui prend la
+        // main : Buddy bouge la tête et se réaligne avant de nous rendre la main.
+        // Le Companion fait « Reset services » à chaque reprise de l'app, ce qui
+        // peut recharger VoCon : on le décharge donc à CHAQUE onSDKReady.
+        try {
+            BuddySDK.Speech.unloadVoCon()
+            Log.i(TAG, "VoCon (hotword « Ok Buddy ») déchargé")
+        } catch (e: Exception) {
+            Log.w(TAG, "unloadVoCon a échoué", e)
+        }
+
         if (sdkInitialized) {
             Log.i(TAG, "onSDKReady rappelé, initialisation déjà faite — ignoré")
             return
         }
         sdkInitialized = true
-
-        // Le hotword "Ok Buddy" (moteur Cerence/VoCon) déclenche une mission
-        // Companion prioritaire qui coupe notre activité. On tente de
-        // désactiver ce moteur pour que l'app ne soit plus interrompue.
-        try {
-            BuddySDK.Speech.unloadVoCon()
-        } catch (e: Exception) {
-            // Best-effort : si l'appel échoue, on continue sans bloquer le démarrage.
-        }
 
         // Écran de diffusion du salon : http://<ip_buddy>:8080/
         try {
@@ -583,6 +586,7 @@ class MainActivity : BuddyActivity() {
         private val PRONUNCIATIONS = mapOf(
             "Epitech" to "Épitek",
             "Parcoursup" to "Parcours supe", // sinon lu « parcoursoupe »
+            "Bachelor" to "Bachelore", // fin en « or », pas « eur »
             "Pré-MSc" to "pré Master of Science",
             "MSc" to "Master of Science",
             "PGE" to "Programme Grande École",
