@@ -20,6 +20,9 @@ object Cards {
     val LETTERS = listOf(A, B, C, D)
     val ANSWERS = setOf(A, B, C, D, VRAI, FAUX)
     fun letter(id: Int) = "ABCD"[LETTERS.indexOf(id)].toString()
+
+    /** Lettres écrites pour la voix : seules, « C » et « D » sont lues comme des chiffres romains (100, 500). */
+    val SPOKEN_LETTERS = listOf("A", "Bé", "Cé", "Dé")
 }
 
 // --- Jeu 1 : « Profil tech » ---
@@ -46,41 +49,54 @@ enum class Profile(val title: String, val text: String) {
 /** Une question : 4 réponses, dans l'ordre des cartes A, B, C, D. */
 data class ProfileQuestion(val text: String, val options: List<Pair<String, Profile>>)
 
+/**
+ * Questions de personnalité, pas seulement tech : chaque question propose
+ * exactement une réponse par profil, dans un ordre différent à chaque fois.
+ */
 val PROFILE_QUESTIONS = listOf(
     ProfileQuestion(
         "Le week-end, tu préfères…",
         listOf(
-            "démonter un objet pour voir comment il marche" to Profile.ROBOT,
-            "créer un jeu ou une appli" to Profile.DEV,
-            "résoudre une énigme ou un escape game" to Profile.CYBER,
-            "comprendre comment une appli devine ce que tu aimes" to Profile.IA,
+            "bricoler ou réparer quelque chose" to Profile.ROBOT,
+            "dessiner, filmer ou créer quelque chose" to Profile.DEV,
+            "faire un escape game ou un jeu d'enquête" to Profile.CYBER,
+            "regarder un documentaire qui explique le monde" to Profile.IA,
         )
     ),
     ProfileQuestion(
-        "Dans un film de science-fiction, tu serais…",
+        "En travail de groupe, tu es plutôt la personne qui…",
         listOf(
-            "le hacker qui déjoue les attaques" to Profile.CYBER,
-            "l'intelligence artificielle qui aide l'équipage" to Profile.IA,
-            "l'ingénieur qui construit les robots" to Profile.ROBOT,
-            "le créateur du monde virtuel" to Profile.DEV,
+            "repère ce qui cloche avant tout le monde" to Profile.CYBER,
+            "a les idées et fait la présentation" to Profile.DEV,
+            "analyse les infos et tranche" to Profile.IA,
+            "met la main à la pâte et construit" to Profile.ROBOT,
+        )
+    ),
+    ProfileQuestion(
+        "Dans un film, ton personnage préféré, c'est…",
+        listOf(
+            "le détective qui démasque le coupable" to Profile.CYBER,
+            "le génie qui prévoit tout à l'avance" to Profile.IA,
+            "l'inventeur qui fabrique des gadgets" to Profile.ROBOT,
+            "l'artiste qui fait rêver tout le monde" to Profile.DEV,
         )
     ),
     ProfileQuestion(
         "Ce qui te rendrait le plus fier…",
         listOf(
-            "un objet que tu as fabriqué et programmé" to Profile.ROBOT,
-            "un site ou un jeu que plein de gens utilisent" to Profile.DEV,
+            "un objet que tu as fabriqué toi-même" to Profile.ROBOT,
+            "un projet que plein de gens utilisent ou regardent" to Profile.DEV,
             "une prédiction qui tombe juste" to Profile.IA,
-            "un piège que personne n'arrive à contourner" to Profile.CYBER,
+            "un secret que personne n'a réussi à percer" to Profile.CYBER,
         )
     ),
     ProfileQuestion(
         "Ton super-pouvoir, ce serait…",
         listOf(
-            "voir les failles que les autres ne voient pas" to Profile.CYBER,
-            "parler aux machines" to Profile.ROBOT,
-            "trouver la logique dans des milliers de chiffres" to Profile.IA,
-            "imaginer des interfaces que tout le monde adore" to Profile.DEV,
+            "voir ce que les autres ne remarquent pas" to Profile.CYBER,
+            "réparer n'importe quoi" to Profile.ROBOT,
+            "deviner l'avenir" to Profile.IA,
+            "donner vie à tes idées en un claquement de doigts" to Profile.DEV,
         )
     ),
 )

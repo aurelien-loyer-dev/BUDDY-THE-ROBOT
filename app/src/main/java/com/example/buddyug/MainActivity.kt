@@ -412,13 +412,13 @@ class MainActivity : BuddyActivity() {
         val total = PROFILE_QUESTIONS.size
         val intro = "C'est parti pour le Profil tech ! $total questions : réponds en me montrant la carte A, B, C ou D."
         broadcastState("speaking", response = intro)
-        speakSync(intro)
+        speakSync("C'est parti pour le Profil tech ! $total questions : réponds en me montrant la carte A, Bé, Cé ou Dé.")
         val picked = mutableListOf<Profile>()
         for ((i, q) in PROFILE_QUESTIONS.withIndex()) {
             val options = q.options.mapIndexed { j, (label, _) -> "ABCD"[j].toString() to label }
             val game = gameJson("profile", "question", i + 1, total, q.text, options)
             val spoken = "Question ${i + 1}. ${q.text} " +
-                options.joinToString(" ") { (card, label) -> "Carte $card : $label." }
+                options.mapIndexed { j, (_, label) -> "Carte ${Cards.SPOKEN_LETTERS[j]} : $label." }.joinToString(" ")
             showGame("speaking", game, spoken)
             speakSync(spoken)
             val card = waitAnswer(Cards.LETTERS.toSet()) ?: return@playGame timeoutBye()
