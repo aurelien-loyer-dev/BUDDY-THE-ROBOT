@@ -9,6 +9,7 @@ from fontTools.ttLib import TTFont
 
 ROOT = Path(__file__).resolve().parent.parent
 MEDIA = ROOT / "display/out/_next/static/media"
+LOGO = ROOT / "display/public/epitech-logo.svg"  # logo officiel blanc, non modifié (charte)
 FONTS = {  # police -> woff2 (sous-ensemble latin) du site d'affichage
     "anton": "6e7755c9813efd51-s.p.0pan85mumqyf3.woff2",
     "mono": "ab56636924653a94-s.p.3cik_s2si-ft-.woff2",
@@ -42,7 +43,12 @@ def font(page, tmp, key):
     page.insert_font(fontname=key, fontfile=str(ttf))
 
 
-def card(doc, tmp, mid, label, sub, accent):
+def logo_pdf():
+    svg = pymupdf.open(LOGO)
+    return pymupdf.open("pdf", svg.convert_to_pdf())
+
+
+def card(doc, tmp, mid, label, sub, accent, logo):
     p = doc.new_page(width=W, height=H)
     for k in FONTS:
         font(p, tmp, k)
@@ -58,6 +64,8 @@ def card(doc, tmp, mid, label, sub, accent):
                 p.draw_rect(pymupdf.Rect(x, y, x + CELL, y + CELL), fill=rgb(WHITE), color=None)
     tx = x0 + side + 40
     maxw = W - 30 - tx
+    # logo Epitech en haut de la zone texte (blanc sur bleu, proportions gardées)
+    p.show_pdf_page(pymupdf.Rect(tx, 52, tx + 150, 52 + 150 * 44.102 / 177.648), logo, 0)
     # barre d'accent + petit carré pixel
     p.draw_rect(pymupdf.Rect(tx, 150, tx + maxw, 160), fill=rgb(accent), color=None)
     p.draw_rect(pymupdf.Rect(tx + maxw - 22, 120, tx + maxw, 142), fill=rgb(accent), color=None)
@@ -66,16 +74,17 @@ def card(doc, tmp, mid, label, sub, accent):
     if sub:
         p.insert_textbox(pymupdf.Rect(tx, 190 + size * CAPH + 40, tx + maxw, H - 60), sub,
                          fontname="mono", fontsize=15, color=rgb(WHITE))
-    p.insert_text((tx, H - 22), "{Epitech} La Réunion — Salon de l'Étudiant", fontname="mono", fontsize=8,
+    p.insert_text((tx, H - 22), "La Réunion — Salon de l'Étudiant", fontname="mono", fontsize=8,
                   color=rgb(WHITE))
     p.insert_text((tx, H - 10), f"marqueur #{mid}", fontname="mono", fontsize=8, color=rgb(WHITE))
 
 
 def main():
     doc = pymupdf.open()
+    logo = logo_pdf()
     with tempfile.TemporaryDirectory() as tmp:
         for c in CARDS:
-            card(doc, tmp, *c)
+            card(doc, tmp, *c, logo)
         out = ROOT / "cards/cartes-buddy.pdf"
         doc.save(out)
     print("écrit", out)
