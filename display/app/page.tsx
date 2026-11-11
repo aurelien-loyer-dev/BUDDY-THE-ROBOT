@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useBuddyState, type BuddyState } from './useBuddyState'
+import { GameView } from './GameView'
 
 const STATUS: Record<BuddyState, string> = {
   idle: 'En veille',
@@ -9,6 +10,7 @@ const STATUS: Record<BuddyState, string> = {
   thinking: 'Je réfléchis',
   speaking: 'Je réponds',
   marker: 'Marqueur détecté',
+  playing: 'À toi de jouer',
 }
 
 // Typo française : espace insécable avant ? ! : ; » pour éviter une ponctuation seule en début de ligne.
@@ -52,9 +54,11 @@ export default function Page() {
   const thinking = state === 'thinking'
   const [latest, ...older] = history
 
-  // Pendant la réflexion on montre la nouvelle question ; sinon le dernier échange reste affiché.
-  const heard = thinking ? update.heard : latest?.heard
-  const response = thinking ? null : (latest?.response ?? GREETING)
+  // Réflexion : la nouvelle question. Parole : ce que Buddy dit en ce moment (réponse,
+  // annonce de jeu…). Sinon : le dernier échange reste affiché.
+  const live = state === 'speaking' && !!update.response
+  const heard = thinking || live ? update.heard : latest?.heard
+  const response = thinking ? null : live ? update.response : (latest?.response ?? GREETING)
   // Pendant la réflexion, le dernier échange quitte la scène : il passe dans l'historique.
   const past = thinking ? history.slice(0, 4) : older.slice(0, 4)
   const responseRef = useFitText(response)
@@ -80,6 +84,9 @@ export default function Page() {
       </header>
 
       <main className="stage">
+        {update.game ? (
+          <GameView game={update.game} waiting={state === 'playing'} speech={update.response} />
+        ) : (
         <section className="current" aria-live="polite">
           <h1 className="title">
             Buddy<span className="cursor">_</span>
@@ -100,13 +107,14 @@ export default function Page() {
           )}
 
           {response ? (
-            <p className="response" key={latest?.id ?? 'greeting'} ref={responseRef}>{nb(response)}</p>
+            <p className="response" key={live ? update.timestamp : (latest?.id ?? 'greeting')} ref={responseRef}>{nb(response)}</p>
           ) : (
             <p className="response pending">
               <span className="dots" aria-label="Buddy réfléchit"><i /><i /><i /></span>
             </p>
           )}
         </section>
+        )}
 
         <aside className="history">
           <h2>Historique_</h2>
@@ -135,7 +143,7 @@ export default function Page() {
           </span>
           <span className="brace close" aria-hidden>{'}'}</span>
         </p>
-        <p className="cta">Parle fort et clairement, Buddy t’écoute_</p>
+        <p className="cta">Parle à Buddy, ou montre-lui une carte JOUER_</p>
       </footer>
     </div>
   )

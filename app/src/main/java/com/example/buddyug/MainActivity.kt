@@ -21,6 +21,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
@@ -49,6 +51,11 @@ class MainActivity : BuddyActivity() {
     private var lastArucoId: Int? = null
     private var lastArucoAnnouncedAt = 0L
     private val pendingArucoId = AtomicReference<Int?>(null)
+
+    // Jeux à marqueurs (contenu : MarkerGames.kt)
+    @Volatile private var gameActive = false
+    private val gameAnswers = LinkedBlockingQueue<Int>()
+    private var bestQuizScore = 0
 
     private var stateServer: StateServer? = null
 
@@ -122,13 +129,17 @@ class MainActivity : BuddyActivity() {
         Thread { startConversationLoop() }.start()
     }
 
-    private fun broadcastState(state: String, heard: String? = null, response: String? = null, marker: Int? = null) {
+    private fun broadcastState(
+        state: String, heard: String? = null, response: String? = null,
+        marker: Int? = null, game: JSONObject? = null,
+    ) {
         val server = stateServer ?: return
         server.broadcast(JSONObject().apply {
             put("state", state)
             put("heard", heard ?: JSONObject.NULL)
             put("response", response ?: JSONObject.NULL)
             put("marker", marker ?: JSONObject.NULL)
+            put("game", game ?: JSONObject.NULL)
             put("timestamp", System.currentTimeMillis())
         })
     }
@@ -177,6 +188,11 @@ class MainActivity : BuddyActivity() {
     private fun arucoPollingLoop() {
         var candidateId: Int? = null
         var candidateStreak = 0
+        // Carte actuellement tenue devant Buddy : elle ne compte qu'une fois,
+        // il faut la retirer (ARUCO_RELEASE_POLLS polls sans elle) pour la rejouer.
+        // Sinon, au jeu, la carte encore levée répondrait aussi à la question suivante.
+        var heldId: Int? = null
+        var missingPolls = 0
 
         while (arucoScanningActive) {
             try {
@@ -187,7 +203,13 @@ class MainActivity : BuddyActivity() {
                     candidateId = seenId
                     candidateStreak = if (seenId != null) 1 else 0
                 }
-                if (seenId != null && candidateStreak >= ARUCO_CONFIRM_STREAK) {
+                if (seenId == null) {
+                    if (++missingPolls >= ARUCO_RELEASE_POLLS) heldId = null
+                } else {
+                    missingPolls = 0
+                }
+                if (seenId != null && candidateStreak >= ARUCO_CONFIRM_STREAK && seenId != heldId) {
+                    heldId = seenId
                     onArucoDetected(seenId)
                 }
             } catch (e: Exception) {
@@ -207,6 +229,15 @@ class MainActivity : BuddyActivity() {
      * interrompre) pour éviter une race avec les flags isSpeaking/isListening.
      */
     private fun onArucoDetected(id: Int) {
+        // En partie : seules les cartes réponse comptent, transmises au jeu.
+        // On coupe la parole pour qu'on puisse répondre sans attendre la fin de la question.
+        if (gameActive) {
+            if (id in Cards.ANSWERS) {
+                gameAnswers.offer(id)
+                BuddySDK.Speech.stopSpeaking()
+            }
+            return
+        }
         val now = System.currentTimeMillis()
         if (id == lastArucoId && now - lastArucoAnnouncedAt < ARUCO_COOLDOWN_MS) return
 
@@ -214,7 +245,8 @@ class MainActivity : BuddyActivity() {
         lastArucoAnnouncedAt = now
         Log.i(TAG, "Marqueur $id confirmé, mise en attente + interruption")
         pendingArucoId.set(id)
-        broadcastState("marker", marker = id)
+        // Les cartes JOUER lancent une partie : pas de badge « marqueur » à l'écran.
+        if (id != Cards.PLAY_PROFILE && id != Cards.PLAY_QUIZ) broadcastState("marker", marker = id)
 
         BuddySDK.Speech.stopSpeaking()
         currentSttTask?.stop()
@@ -271,6 +303,11 @@ class MainActivity : BuddyActivity() {
                     Thread.sleep(500)
                     continue
                 }
+                when (pendingArucoId.getAndSet(null)) {
+                    Cards.PLAY_PROFILE -> { runProfileGame(); continue }
+                    Cards.PLAY_QUIZ -> { runQuizGame(); continue }
+                    else -> {}
+                }
                 pendingArucoId.getAndSet(null)?.let { id ->
                     Log.i(TAG, "Annonce du marqueur $id (délivrée depuis la boucle Q&A)")
                     // Annonce vocale volontairement vide : l'écran affiche le marqueur.
@@ -301,6 +338,132 @@ class MainActivity : BuddyActivity() {
                 Thread.sleep(300)
             }
         }
+    }
+
+    // --- Jeux à marqueurs (contenu : MarkerGames.kt) ---
+
+    /** État du jeu envoyé à l'écran (champ "game" du message WebSocket). */
+    private fun gameJson(
+        type: String, phase: String, step: Int, total: Int, question: String,
+        options: List<Pair<String, String>>, answer: String? = null, correct: Boolean? = null,
+        score: Int? = null, best: Int? = null, resultTitle: String? = null, resultText: String? = null,
+    ) = JSONObject().apply {
+        put("type", type)
+        put("phase", phase)
+        put("step", step)
+        put("total", total)
+        put("question", question)
+        put("options", JSONArray().apply {
+            options.forEach { (card, label) -> put(JSONObject().put("card", card).put("label", label)) }
+        })
+        put("answer", answer ?: JSONObject.NULL)
+        put("correct", correct ?: JSONObject.NULL)
+        put("score", score ?: JSONObject.NULL)
+        put("best", best ?: JSONObject.NULL)
+        put("resultTitle", resultTitle ?: JSONObject.NULL)
+        put("resultText", resultText ?: JSONObject.NULL)
+    }
+
+    /** Attend une carte parmi [valid] ; null si personne ne répond à temps. */
+    private fun waitAnswer(valid: Set<Int>): Int? {
+        broadcastStateKeepGame("playing")
+        mainHandler.post { BuddySDK.UI.setMood(FacialExpression.LISTENING, 0.5, null) }
+        val deadline = System.currentTimeMillis() + GAME_ANSWER_TIMEOUT_MS
+        while (true) {
+            val left = deadline - System.currentTimeMillis()
+            if (left <= 0) return null
+            val id = gameAnswers.poll(left, TimeUnit.MILLISECONDS) ?: return null
+            if (id in valid) return id
+        }
+    }
+
+    private var lastGame: JSONObject? = null
+
+    private fun showGame(state: String, game: JSONObject, speech: String? = null) {
+        lastGame = game
+        broadcastState(state, response = speech, game = game)
+    }
+
+    private fun broadcastStateKeepGame(state: String) = broadcastState(state, game = lastGame)
+
+    /** Encadre une partie : coupe la conversation, et nettoie quoi qu'il arrive. */
+    private fun playGame(name: String, body: () -> Unit) {
+        Log.i(TAG, "Début du jeu $name")
+        gameAnswers.clear()
+        gameActive = true
+        try {
+            body()
+            Thread.sleep(GAME_RESULT_HOLD_MS) // laisse le résultat à l'écran
+        } finally {
+            gameActive = false
+            gameAnswers.clear()
+            lastGame = null
+            Log.i(TAG, "Fin du jeu $name")
+        }
+    }
+
+    private fun timeoutBye() {
+        val text = "Personne ? Pas grave, on rejouera plus tard. Montre-moi une carte Jouer quand tu veux !"
+        broadcastState("speaking", response = text)
+        speakSync(text)
+    }
+
+    private fun runProfileGame() = playGame("profil") {
+        val total = PROFILE_QUESTIONS.size
+        val intro = "C'est parti pour le Profil tech ! $total questions : réponds en me montrant la carte A, B, C ou D."
+        broadcastState("speaking", response = intro)
+        speakSync(intro)
+        val picked = mutableListOf<Profile>()
+        for ((i, q) in PROFILE_QUESTIONS.withIndex()) {
+            val options = q.options.mapIndexed { j, (label, _) -> "ABCD"[j].toString() to label }
+            val game = gameJson("profile", "question", i + 1, total, q.text, options)
+            val spoken = "Question ${i + 1}. ${q.text} " +
+                options.joinToString(" ") { (card, label) -> "Carte $card : $label." }
+            showGame("speaking", game, spoken)
+            speakSync(spoken)
+            val card = waitAnswer(Cards.LETTERS.toSet()) ?: return@playGame timeoutBye()
+            picked += q.options[Cards.LETTERS.indexOf(card)].second
+            showGame("speaking", gameJson("profile", "feedback", i + 1, total, q.text, options, answer = Cards.letter(card)))
+            speakSync(listOf("Noté !", "Bien reçu !", "OK !", "Intéressant…")[i % 4])
+        }
+        val p = profileResult(picked)
+        val text = "Ton profil : ${p.title} ! ${p.text}"
+        showGame("speaking", gameJson("profile", "result", total, total, "", emptyList(),
+            resultTitle = p.title, resultText = p.text), text)
+        speakSync(text)
+    }
+
+    private fun runQuizGame() = playGame("quiz") {
+        val items = QUIZ_ITEMS.shuffled().take(QUIZ_LENGTH)
+        val total = items.size
+        val options = listOf("VRAI" to "Vrai", "FAUX" to "Faux")
+        val intro = "C'est parti pour le quiz ! $total affirmations : montre-moi la carte Vrai ou la carte Faux."
+        broadcastState("speaking", response = intro)
+        speakSync(intro)
+        var score = 0
+        for ((i, item) in items.withIndex()) {
+            val spoken = "Affirmation ${i + 1}. ${item.statement} Vrai ou faux ?"
+            showGame("speaking", gameJson("quiz", "question", i + 1, total, item.statement, options, score = score, best = bestQuizScore), spoken)
+            speakSync(spoken)
+            val card = waitAnswer(setOf(Cards.VRAI, Cards.FAUX)) ?: return@playGame timeoutBye()
+            val correct = (card == Cards.VRAI) == item.answer
+            if (correct) score++
+            val verdict = (if (correct) "Bonne réponse ! " else "Raté ! ") + (if (item.answer) "C'est vrai. " else "C'est faux. ") + item.explanation
+            showGame("speaking", gameJson("quiz", "feedback", i + 1, total, item.statement, options,
+                answer = if (card == Cards.VRAI) "VRAI" else "FAUX", correct = correct, score = score, best = bestQuizScore), verdict)
+            speakSync(verdict)
+        }
+        val record = score > bestQuizScore
+        if (record) bestQuizScore = score
+        val text = "Score final : $score sur $total ! " + when {
+            record -> "Nouveau meilleur score du jour !"
+            score == total -> "Sans faute, bravo !"
+            score >= total / 2 + 1 -> "Bien joué !"
+            else -> "Viens en parler avec l'équipe du stand, ils t'expliqueront tout."
+        }
+        showGame("speaking", gameJson("quiz", "result", total, total, "", emptyList(),
+            score = score, best = bestQuizScore, resultTitle = "$score / $total", resultText = text), text)
+        speakSync(text)
     }
 
     private fun listenOnce(): String? {
@@ -401,6 +564,9 @@ class MainActivity : BuddyActivity() {
         private const val ARUCO_POLL_INTERVAL_MS = 400L
         private const val ARUCO_COOLDOWN_MS = 5000L
         private const val ARUCO_CONFIRM_STREAK = 3
+        private const val ARUCO_RELEASE_POLLS = 3 // ~1,2 s sans la carte = carte retirée
+        private const val GAME_ANSWER_TIMEOUT_MS = 25_000L
+        private const val GAME_RESULT_HOLD_MS = 4_000L
         private const val STATE_SERVER_PORT = 8080
         // llama-3.3-70b-versatile a été retiré de Groq (404 model_not_found).
         // Modèles dispo : curl https://api.groq.com/openai/v1/models -H "Authorization: Bearer <clé>"

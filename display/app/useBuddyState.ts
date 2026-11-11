@@ -2,7 +2,23 @@
 
 import { useEffect, useState } from 'react'
 
-export type BuddyState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'marker'
+export type BuddyState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'marker' | 'playing'
+
+/** Partie en cours (jeux à marqueurs, voir MarkerGames.kt / gameJson dans MainActivity). */
+export interface Game {
+  type: 'profile' | 'quiz'
+  phase: 'question' | 'feedback' | 'result'
+  step: number
+  total: number
+  question: string
+  options: { card: string; label: string }[]
+  answer: string | null
+  correct: boolean | null
+  score: number | null
+  best: number | null
+  resultTitle: string | null
+  resultText: string | null
+}
 
 /** Message diffusé par StateServer.kt (voir broadcastState dans MainActivity). */
 export interface BuddyUpdate {
@@ -10,6 +26,7 @@ export interface BuddyUpdate {
   heard: string | null
   response: string | null
   marker: number | null
+  game: Game | null
   timestamp: number
 }
 
@@ -19,7 +36,7 @@ export interface Exchange {
   response: string
 }
 
-const INITIAL: BuddyUpdate = { state: 'idle', heard: null, response: null, marker: null, timestamp: 0 }
+const INITIAL: BuddyUpdate = { state: 'idle', heard: null, response: null, marker: null, game: null, timestamp: 0 }
 const RECONNECT_DELAY_MS = 2000
 const HISTORY_SIZE = 6
 const MARKER_VISIBLE_MS = 6000
@@ -61,7 +78,9 @@ export function useBuddyState() {
         setUpdate(next)
         if (next.marker !== null) setMarker(next.marker)
         const response = next.response?.trim()
-        if (next.state === 'speaking' && response) {
+        next.game ??= null // l'état initial du serveur n'a pas ce champ
+        // Historique = vrais échanges seulement (pas les répliques de jeu ni les annonces).
+        if (next.state === 'speaking' && response && next.heard && !next.game) {
           // Dédoublonné par timestamp : le serveur renvoie le dernier état à chaque reconnexion.
           setHistory((h) =>
             h.some((e) => e.id === next.timestamp)

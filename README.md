@@ -32,6 +32,7 @@ Comment `restart` relance l'app : BuddyCore refuse un `adb shell am start` direc
 Buddy reste immobile. `MainActivity` fait tourner un robot conversationnel :
 
 - **Q&A vocal** : boucle STT (Google, français) → [Groq](https://groq.com) (`qwen/qwen3.8-27b`, constante `GROQ_MODEL` ; `llama-3.3-70b-versatile` a été retiré de Groq en 2026) → TTS, avec historique de conversation. Le prompt système (`askGroq` dans `MainActivity.kt`) cible les lycéens, les étudiants en réorientation et leurs parents : présentation d'Epitech et du Hub, débouchés, ton tutoyant et motivant, réponse dans la langue du visiteur (français, anglais, créole…), 2-3 phrases maximum. **Il interdit d'inventer des chiffres** (tarifs, dates, places, salaires) : pour tout ce qui est administratif, Buddy renvoie vers l'équipe du stand ou epitech.eu. C'est le premier endroit à modifier pour un autre événement.
+- **Jeux à marqueurs** : Profil tech et Quiz Vrai ou Faux, joués avec des cartes ArUco (voir la section dédiée plus bas).
 - **Scan de marqueurs ArUco** : `BuddySDK.Vision.getListOfArucos(ArucoDictionary.DICT_4X4_50)` en polling (400ms), confirmation sur 3 détections consécutives pour éviter les faux positifs, le numéro détecté est diffusé à l'écran (l'annonce vocale est actuellement vide, donc désactivée). Voir les commentaires dans `MainActivity.kt` pour l'historique du diagnostic (dictionnaire, permission `VISION`, tracker de personnes concurrent).
 - **Écran de diffusion en direct** (`display/`) : un mini-serveur HTTP + WebSocket embarqué (`StateServer.kt`, NanoHTTPD) sert une page Next.js qui affiche en direct ce que Buddy entend/répond, pour un écran annexe au stand du salon. Voir la section dédiée plus bas.
 
@@ -115,9 +116,24 @@ NEXT_PUBLIC_WS_HOST=<ip_buddy> npm run dev   # se connecte au StateServer du rob
 
 **Utilisation le jour du salon** : ouvrir un navigateur sur l'écran et naviguer vers `http://<ip_buddy>:8080/`. Reconnexion automatique si l'app ou le robot redémarre.
 
-## Pistes
+## Jeux à marqueurs
 
-- **Jeu avec les marqueurs** (idée, pas commencé) : « Quel profil tech es-tu ? ». Buddy pose 4-5 questions, le visiteur répond en montrant des cartes ArUco A/B/C/D (`DICT_4X4_50`, ex. ID 0-3, plus une carte « Jouer »), et l'écran affiche les questions puis le profil obtenu (Cyber, IA & Data, Dev Jeu & 3D, Robotique & Hub). Variante : quiz Vrai/Faux avec score et classement du jour. Côté code, il faudrait un mode jeu qui met la boucle Q&A en pause, des questions écrites en dur (pas générées par Groq) et quelques champs en plus dans le message WebSocket.
+Deux jeux, lancés en montrant une carte à Buddy. Les cartes sont dans `cards/cartes-buddy.pdf` (A4, charte Epitech), à imprimer et si possible à plastifier. On les régénère avec `python3 cards/generate_cards.py` (OpenCV `cv2.aruco`, pymupdf, fontTools + brotli pour les polices).
+
+| ID ArUco (`DICT_4X4_50`) | Carte |
+|---|---|
+| 20 | JOUER : Profil tech |
+| 21 | JOUER : Quiz Vrai ou Faux |
+| 0, 1, 2, 3 | A, B, C, D (réponses du Profil tech) |
+| 10, 11 | VRAI, FAUX (réponses du Quiz) |
+
+- **Profil tech** : 4 questions, réponses avec A/B/C/D. Le résultat est l'un de 4 profils (Cybersécurité, IA et Data, Dev et Création, Robotique et IoT), chacun relié aux formations Epitech correspondantes.
+- **Quiz Vrai ou Faux** : 5 affirmations tirées au hasard, avec la bonne réponse et une explication après chaque carte. Le score final est comparé au record du jour, qui est gardé en mémoire et remis à zéro quand l'app redémarre.
+- **Pendant une partie** : la conversation vocale est en pause, et l'écran affiche la question, les cartes possibles et le résultat (champ `game` du message WebSocket).
+- **Fin de partie** : sans réponse au bout de 25 s, Buddy abandonne la partie et reprend la conversation.
+- **Une carte levée ne compte qu'une fois** : il faut la retirer environ 1 s avant de pouvoir la rejouer. Sinon, une carte restée levée répondrait aussi à la question suivante.
+
+Le contenu des jeux (questions, profils, affirmations du quiz) est dans `MarkerGames.kt`. Les infos Epitech qu'il contient reprennent celles, vérifiées, du prompt : n'y ajouter que des faits vérifiés sur epitech.eu.
 
 ## Limitations connues
 
