@@ -17,13 +17,16 @@ Une fois `buddy.ip=<ip_du_robot>` renseigné dans `local.properties` (ou via `BU
 
 | Commande | Effet |
 |---|---|
-| `./buddy deploy` | build de l'écran Next.js + APK, installation, redémarrage de Buddy, attente que l'app réponde, ouverture de l'écran |
-| `./buddy restart` | redémarre Buddy et attend que l'app soit prête (~1 min) |
+| `./buddy deploy` | build de l'écran Next.js + APK, installation, relance de l'app, attente qu'elle réponde, ouverture de l'écran |
+| `./buddy restart` | relance l'app sans redémarrer le robot (~5 s) |
+| `./buddy reboot` | redémarre tout le robot, pour les cas bloqués (~1 min, **sur secteur**) |
 | `./buddy status` | robot connecté ? app lancée ? écran joignable ? |
 | `./buddy logs` | logs de l'app en direct (Ctrl+C pour quitter) |
 | `./buddy screen` | ouvre `http://<ip>:8080/` dans le navigateur |
 
-Pourquoi `restart` passe par un reboot : BuddyCore refuse un lancement via `adb shell am start` (log « The activity will be restarted by companion », puis déconnexion du SDK). Le seul relancement fiable est donc un reboot, puisque l'app est configurée en `Autostart: true`.
+Comment `restart` relance l'app : BuddyCore refuse un `adb shell am start` direct de `MainActivity` (log « The activity will be restarted by companion », puis déconnexion du SDK). Au boot, le Companion ne lance pas l'app directement : il passe par son activité relais exportée `com.bfr.buddy.companion/com.bfr.buddy.utils.ActivityLauncher`, avec les extras `ActivityResultTracker_packageName_to_launch`, `ActivityResultTracker_activityName_to_launch` et `ActivityResultTracker_should_launch_with_isLockTask`. `restart` fait pareil après un `force-stop` : le Companion crée sa mission, donne le focus à l'app, et elle démarre normalement.
+
+`reboot` est à éviter sur batterie : le 2026-11-11, après un `adb reboot` sur batterie, Buddy est resté éteint (écran noir, plus sur le réseau) jusqu'à un rallumage manuel. Pendant le salon, garde-le branché.
 ## Fonctionnalités
 
 Buddy reste immobile. `MainActivity` fait tourner un robot conversationnel :

@@ -12,9 +12,12 @@ DEV="$IP:5555"
 URL="http://$IP:$PORT/"
 
 connect() {
-  # Test du port d'abord : `adb connect` vers une IP morte bloque ~75 s.
+  # Déjà connecté côté ADB : rien à faire (pas de sonde réseau, qui peut échouer
+  # à tort quand le WiFi du robot est lent à accepter une nouvelle connexion).
+  [ "$(adb -s "$DEV" get-state 2>/dev/null)" = device ] && return 0
+  # Sinon, test du port d'abord : `adb connect` vers une IP morte bloque ~75 s.
   # (sur macOS, seul -G borne la connexion ; -w ne la borne que sous Linux)
-  if [ "$(uname)" = Darwin ]; then t=(-G 3); else t=(-w 3); fi
+  if [ "$(uname)" = Darwin ]; then t=(-G 8); else t=(-w 8); fi
   nc -z "${t[@]}" "$IP" 5555 2>/dev/null || { echo "Buddy injoignable sur $DEV (même WiFi ? robot allumé ? ADB WiFi actif ?)"; exit 1; }
   adb connect "$DEV" >/dev/null 2>&1 || true
   adb -s "$DEV" get-state >/dev/null 2>&1 || { echo "Buddy injoignable sur $DEV (même WiFi ? ADB WiFi actif ?)"; exit 1; }
@@ -30,11 +33,26 @@ wait_ready() {
   echo; echo "L'app ne répond pas sur $URL : regarde ./buddy logs"; exit 1
 }
 
-# BuddyCore refuse un lancement via `am start` ("restarted by companion") :
-# le seul relancement fiable est un reboot, l'app ayant Autostart: true.
+# Relance l'app sans redémarrer le robot. Un `am start` direct de MainActivity
+# est refusé par BuddyCore ("restarted by companion") : on passe par le relais
+# exporté du Companion (com.bfr.buddy.utils.ActivityLauncher), comme au boot.
+# Le Companion crée alors sa mission et donne le focus à l'app (~1 s).
 restart() {
   connect
-  echo "Redémarrage de Buddy..."
+  echo "Relance de l'app..."
+  adb -s "$DEV" shell am force-stop "$PKG"
+  adb -s "$DEV" shell am start -n com.bfr.buddy.companion/com.bfr.buddy.utils.ActivityLauncher \
+    --es ActivityResultTracker_packageName_to_launch "$PKG" \
+    --es ActivityResultTracker_activityName_to_launch "$PKG.MainActivity" \
+    --ez ActivityResultTracker_should_launch_with_isLockTask false >/dev/null
+  wait_ready
+}
+
+# Redémarrage complet du robot (l'app repart via Autostart: true).
+# Attention : sur batterie, Buddy s'est déjà éteint au lieu de redémarrer.
+reboot_robot() {
+  connect
+  echo "Redémarrage de Buddy (laisse-le branché sur secteur)..."
   adb -s "$DEV" reboot
   sleep 15 # laisse le serveur de l'ancienne instance tomber avant d'attendre le nouveau
   wait_ready
@@ -53,6 +71,7 @@ case "${1:-}" in
     open_screen
     ;;
   restart) restart ;;
+  reboot) reboot_robot ;;
   logs)
     connect
     adb -s "$DEV" logcat -s 'BuddyUG:*' 'AndroidRuntime:E'
@@ -69,8 +88,9 @@ case "${1:-}" in
   *)
     cat <<EOF
 Usage : ./buddy <commande>
-  deploy   build écran + APK, installe, redémarre Buddy, ouvre l'écran
-  restart  redémarre Buddy et attend que l'app soit prête
+  deploy   build écran + APK, installe, relance l'app, ouvre l'écran
+  restart  relance l'app (sans redémarrer le robot) et attend qu'elle soit prête
+  reboot   redémarre tout le robot (à garder pour les cas bloqués, sur secteur)
   logs     logs de l'app en direct (Ctrl+C pour quitter)
   status   robot connecté ? app lancée ? écran joignable ?
   screen   ouvre $URL
