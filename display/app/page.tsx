@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useBuddyState, type BuddyState } from './useBuddyState'
 
 const STATUS: Record<BuddyState, string> = {
@@ -12,6 +13,36 @@ const STATUS: Record<BuddyState, string> = {
 
 // Typo française : espace insécable avant ? ! : ; » pour éviter une ponctuation seule en début de ligne.
 const nb = (s: string) => s.replace(/ ([?!:;»])/g, ' $1').replace(/« /g, '« ')
+
+// Baseline : les accolades alternent entre les trois couleurs triptyques.
+const VARIANTS = ['tech', 'together', 'tomorrow'] as const
+const VARIANT_MS = 5000
+
+/**
+ * Réduit la taille du texte jusqu'à ce qu'il tienne dans sa boîte (les réponses
+ * de Buddy font de 1 à 4 phrases). La taille max vient du CSS, MIN_PX est le plancher.
+ */
+const MIN_PX = 20
+function useFitText(text: string | null) {
+  const ref = useRef<HTMLParagraphElement>(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const fit = () => {
+      el.style.fontSize = ''
+      let size = parseFloat(getComputedStyle(el).fontSize)
+      while (el.scrollHeight > el.clientHeight + 1 && size > MIN_PX) {
+        size = Math.max(MIN_PX, size * 0.92)
+        el.style.fontSize = `${size}px`
+      }
+    }
+    fit()
+    document.fonts.ready.then(fit)
+    window.addEventListener('resize', fit)
+    return () => window.removeEventListener('resize', fit)
+  }, [text])
+  return ref
+}
 
 const GREETING = 'Approche-toi et pose-moi une question sur Epitech, les études d’informatique ou les métiers de la tech !'
 
@@ -26,6 +57,13 @@ export default function Page() {
   const response = thinking ? null : (latest?.response ?? GREETING)
   // Pendant la réflexion, le dernier échange quitte la scène : il passe dans l'historique.
   const past = thinking ? history.slice(0, 4) : older.slice(0, 4)
+  const responseRef = useFitText(response)
+
+  const [variant, setVariant] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setVariant((v) => (v + 1) % VARIANTS.length), VARIANT_MS)
+    return () => clearInterval(t)
+  }, [])
 
   return (
     <div className="screen" data-state={state}>
@@ -62,7 +100,7 @@ export default function Page() {
           )}
 
           {response ? (
-            <p className="response" key={latest?.id ?? 'greeting'}>{nb(response)}</p>
+            <p className="response" key={latest?.id ?? 'greeting'} ref={responseRef}>{nb(response)}</p>
           ) : (
             <p className="response pending">
               <span className="dots" aria-label="Buddy réfléchit"><i /><i /><i /></span>
@@ -88,10 +126,14 @@ export default function Page() {
       </main>
 
       <footer className="bottom">
-        <p className="baseline">
-          <span className="brace">{'{'}</span>
-          <span>&lt;<em className="t1">Tech</em> <em>Together</em> <em>Tomorrow</em>&gt;</span>
-          <span className="brace">{'}'}</span>
+        <p className="baseline" data-v={VARIANTS[variant]} aria-label="Tech Together Tomorrow">
+          <span className="brace open" aria-hidden>{'{'}</span>
+          <span className="lines" aria-hidden>
+            <span>&lt;<em data-w="tech">Tech</em></span>
+            <span><em data-w="together">Together</em></span>
+            <span><em data-w="tomorrow">Tomorrow</em>&gt;</span>
+          </span>
+          <span className="brace close" aria-hidden>{'}'}</span>
         </p>
         <p className="cta">Parle fort et clairement, Buddy t’écoute_</p>
       </footer>

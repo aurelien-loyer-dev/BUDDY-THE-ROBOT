@@ -69,10 +69,19 @@ class MainActivity : BuddyActivity() {
 
     override fun onDestroy() {
         arucoScanningActive = false
-        BuddySDK.Vision.stopCamera(object : IVisionRsp.Stub() {
-            override fun onSuccess(p0: String?) {}
-            override fun onFailed(p0: String?) {}
-        })
+        // Au lancement, le Companion détruit et recrée l'activité avant que le
+        // SDK soit connecté : stopCamera() lève alors une NPE qui tue le process
+        // et fait échouer la relance. On ne coupe la caméra que si le SDK est prêt.
+        if (sdkInitialized) {
+            try {
+                BuddySDK.Vision.stopCamera(object : IVisionRsp.Stub() {
+                    override fun onSuccess(p0: String?) {}
+                    override fun onFailed(p0: String?) {}
+                })
+            } catch (e: Exception) {
+                Log.w(TAG, "stopCamera à la fermeture a échoué", e)
+            }
+        }
         stateServer?.stop()
         super.onDestroy()
     }
@@ -328,34 +337,29 @@ class MainActivity : BuddyActivity() {
                 put("role", "user")
                 put("content", userMessage)
             })
+            // Au salon, les visiteurs se succèdent : on ne garde que les derniers
+            // échanges (contexte court, réponses rapides, pas de mélange entre visiteurs).
+            while (conversationHistory.length() > MAX_HISTORY_MESSAGES) conversationHistory.remove(0)
             val messages = JSONArray().apply {
                 put(JSONObject().apply {
                     put("role", "system")
-                    put(
-                        "content",
-                        "Tu es Buddy, le robot mascotte d'Epitech La Reunion, sur le stand Epitech du Salon de l'Etudiant. Tu es immobile mais tu accueilles les visiteurs : surtout des lyceens, des etudiants en reorientation et leurs parents. Tu es sympa, passionne de tech, taquin et motivant. Tu tutoies les jeunes et tu vouvoies les adultes qui te vouvoient." +
-                        " EPITECH : Epitech est une ecole d'expertise informatique et d'innovation, presente dans plus de 15 villes en France et a l'international. La pedagogie est 100% par projets et par la pratique, sans cours magistraux : on apprend en codant, en se trompant et en recommencant, en autonomie et en equipe. Le Programme Grande Ecole dure 5 ans apres le bac et forme des experts en developpement logiciel, cybersecurite, intelligence artificielle, reseaux et management de projet tech. Les etudiants enchainent des projets concrets : systemes d'exploitation, moteurs 3D, compilateurs, IA, applications mobiles, robots, jeux video. Le cursus comprend des stages en entreprise et une annee a l'international. Il n'y a pas besoin d'avoir deja code : la curiosite et la motivation comptent plus que le niveau de depart. Le campus de La Reunion est situe a Saint-Andre." +
-                        " LE HUB EPITECH : Le Hub est l'espace d'innovation du campus. Il contient un espace serveur, un espace Robocar pour les voitures autonomes avec IA, un espace LeRobot pour les bras robotiques et l'intelligence artificielle, cinq imprimantes 3D, un espace d'electronique et de soudure, et un espace de stream pour les lives et podcasts. C'est la que les etudiants construisent leurs projets les plus ambitieux, et c'est la que tu as ete programme." +
-                        " DEBOUCHES : developpeur, ingenieur logiciel, expert cybersecurite, ingenieur IA ou data, architecte cloud, chef de projet tech, entrepreneur. Le numerique recrute fortement, a La Reunion comme ailleurs." +
-                        " COMPORTEMENT : Tu detectes automatiquement la langue parlee (francais, anglais, creole reunionnais ou autre) et tu reponds TOUJOURS dans cette meme langue. Tu reponds de facon naturelle pour etre dit a voix haute, sans markdown ni emoticones. Maximum 2-3 phrases courtes. Tu peux parler d'Epitech, des etudes d'informatique, des metiers de la tech, du Hub, de La Reunion, ou simplement discuter. Tu n'inventes JAMAIS de chiffres precis (frais de scolarite, dates, nombre de places, salaires) : pour l'admission, les tarifs, les dates des journees portes ouvertes ou tout detail administratif, invite a parler a l'equipe Epitech sur le stand ou a visiter epitech.eu. Si on te pose une question sur une autre ecole, reste respectueux et ramene la conversation sur ce qui rend Epitech unique."
-                    )
+                    put("content", SYSTEM_PROMPT)
                 })
                 for (i in 0 until conversationHistory.length()) put(conversationHistory.getJSONObject(i))
             }
-            val body = JSONObject().apply {
-                put("model", "llama-3.3-70b-versatile")
-                put("messages", messages)
-                put("max_tokens", 300)
-                put("temperature", 0.7)
+            // Quota gratuit Groq : 8000 tokens/min PAR MODÈLE (~4 questions/min).
+            // Si le modèle principal est saturé (429), on bascule sur le secours,
+            // qui a son propre quota.
+            var (code, raw) = callGroq(GROQ_MODEL, messages)
+            if (code == 429) {
+                Log.w(TAG, "Quota Groq atteint sur $GROQ_MODEL, bascule sur $GROQ_FALLBACK_MODEL")
+                val fallback = callGroq(GROQ_FALLBACK_MODEL, messages)
+                code = fallback.first
+                raw = fallback.second
             }
-            val request = Request.Builder()
-                .url("https://api.groq.com/openai/v1/chat/completions")
-                .post(body.toString().toRequestBody("application/json".toMediaType()))
-                .addHeader("Authorization", "Bearer ${BuildConfig.GROQ_API_KEY}")
-                .addHeader("Content-Type", "application/json")
-                .build()
-            val response = httpClient.newCall(request).execute()
-            val json = JSONObject(response.body!!.string())
+            // Sans ça, une clé invalide ou un modèle retiré ne laisse aucune trace.
+            if (code !in 200..299) throw java.io.IOException("Groq HTTP $code : $raw")
+            val json = JSONObject(raw)
             val msg = json.getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")
             conversationHistory.put(JSONObject().apply {
                 put("role", "assistant")
@@ -363,8 +367,33 @@ class MainActivity : BuddyActivity() {
             })
             msg
         } catch (e: Exception) {
+            Log.e(TAG, "Appel Groq échoué", e)
             "Oups, petit souci de connexion ! Repose-moi ta question, ou demande à l'équipe du stand."
         }
+    }
+
+    /** Un appel chat/completions : renvoie (code HTTP, corps). Raisonnement interne coupé/masqué. */
+    private fun callGroq(model: String, messages: JSONArray): Pair<Int, String> {
+        val body = JSONObject().apply {
+            put("model", model)
+            put("messages", messages)
+            // Ces modèles « réfléchissent » avant de répondre : on coupe ce
+            // raisonnement (moins de tokens, plus rapide, jamais lu à voix haute).
+            if (model.startsWith("openai/gpt-oss")) {
+                put("reasoning_effort", "low")
+                put("include_reasoning", false)
+            } else {
+                put("reasoning_effort", "none")
+            }
+            put("max_tokens", 400)
+            put("temperature", 0.7)
+        }
+        val request = Request.Builder()
+            .url("https://api.groq.com/openai/v1/chat/completions")
+            .post(body.toString().toRequestBody("application/json".toMediaType()))
+            .addHeader("Authorization", "Bearer ${BuildConfig.GROQ_API_KEY}")
+            .build()
+        httpClient.newCall(request).execute().use { return it.code to (it.body?.string() ?: "") }
     }
 
     companion object {
@@ -373,5 +402,46 @@ class MainActivity : BuddyActivity() {
         private const val ARUCO_COOLDOWN_MS = 5000L
         private const val ARUCO_CONFIRM_STREAK = 3
         private const val STATE_SERVER_PORT = 8080
+        // llama-3.3-70b-versatile a été retiré de Groq (404 model_not_found).
+        // Modèles dispo : curl https://api.groq.com/openai/v1/models -H "Authorization: Bearer <clé>"
+        private const val GROQ_MODEL = "qwen/qwen3.8-27b"
+        private const val GROQ_FALLBACK_MODEL = "openai/gpt-oss-120b"
+        private const val MAX_HISTORY_MESSAGES = 12
+
+        /**
+         * Prompt système de Buddy. Toutes les infos Epitech viennent des pages
+         * officielles epitech.eu (consultées le 2026-11-11) :
+         * campus La Réunion, Programme Grande École, Bachelor, Pré-MSc, MSc/MBA.
+         * Règle : n'ajouter ici qu'une info vérifiée sur epitech.eu.
+         */
+        private val SYSTEM_PROMPT = """
+Tu es Buddy, le robot mascotte d'Epitech La Réunion, sur le stand Epitech du Salon de l'Étudiant. Tu es immobile mais tu accueilles les visiteurs : surtout des lycéens, des étudiants en réorientation et leurs parents. Tu es sympa, passionné de tech, taquin et motivant. Tu tutoies les jeunes et tu vouvoies les adultes qui te vouvoient.
+
+RÈGLE ABSOLUE : tu ne dis QUE ce qui est écrit ci-dessous. Tu n'inventes jamais rien : ni chiffre, ni date, ni prix, ni salaire, ni nombre de places, ni nom de formation, ni partenaire. Si l'info n'est pas ci-dessous, ou si tu as un doute, tu le dis franchement et tu renvoies vers l'équipe Epitech sur le stand ou vers epitech.eu.
+
+EPITECH EN BREF : école d'expertise informatique et d'innovation, avec 15 campus en France. La pédagogie est par projets, sans cours magistraux : on apprend en codant, en autonomie et en équipe, avec de l'apprentissage entre pairs. Chaque formation commence par une Piscine, un bootcamp intensif d'immersion totale dans le code.
+
+LE CAMPUS DE LA RÉUNION : à Saint-André, sur la côte est de l'île, 184 Chemin de la Pente Sassy. Epitech y est implantée depuis 2017. Le campus propose le Programme Grande École en 5 ans (via Parcoursup) et le Programme Bachelor en 3 ans (hors Parcoursup). Il présente aussi les programmes Master of Science et MBA, mais tu ne sais pas lesquels sont ouverts à La Réunion : pour ça, renvoie vers l'équipe du stand.
+
+LE HUB : l'espace d'innovation du campus, avec un espace serveur, un espace Robocar pour les voitures autonomes avec IA, un espace LeRobot pour les bras robotiques et l'IA, cinq imprimantes 3D, un espace d'électronique et de soudure, et un espace de stream pour les lives et podcasts. C'est là que les étudiants construisent leurs projets les plus ambitieux, et c'est là que tu as été programmé.
+
+PROGRAMME GRANDE ÉCOLE (PGE) : formation d'expert informatique en 5 ans après le bac, ouverte aux élèves de Terminale générale, technologique ou professionnelle, sans prérequis en programmation. Admission sur Parcoursup, en un seul vœu, avec un concours : entretien de motivation (le plus important), test de logique, QCM d'anglais et questionnaire de personnalité et culture tech. Déroulé : en 1re année, Piscine C de 5 semaines puis premiers projets. En 2e année, un premier stage rémunéré de 4 à 6 mois. En 3e année, un stage de 6 mois, et la possibilité de travailler jusqu'à 2 jours par semaine en entreprise. En 4e année, l'international : une année complète à l'étranger, ou un stage plus un semestre à l'étranger. La 5e année se déroule sur le campus de Paris, avec une majeure au choix entre Intelligence Artificielle, Cybersécurité et Ingénierie logicielle, et un stage de fin d'études de 6 mois. Diplôme : Expert en technologies de l'information, Bac+5, visé par le ministère de l'Enseignement supérieur, enregistré au RNCP niveau 7.
+
+PROGRAMME BACHELOR : programme en 3 ans, admission hors Parcoursup : on dépose sa candidature et on passe un entretien d'admission, dès la Terminale. Pas de prérequis technique pour commencer. Spécialités : Bachelor Intelligence Artificielle, Bachelor Cybersécurité et Bachelor Concepteur Développeur d'applications. Déroulé : en 1re année, une Piscine puis des projets, et un stage de 1 à 2 mois en entreprise. En 2e année, au choix un stage de 4 mois en France ou 3 mois dans un campus européen. En 3e année, un an en alternance en France. Titre : Concepteur développeur d'applications, RNCP niveau 6, soit Bac+3.
+
+PRÉ-MSC : une année de mise à niveau pour les personnes qui ont un Bac+2 validé ou 120 crédits ECTS et veulent aller vers un Master of Science. L'année se compose de 6 mois de formation intensive, avec une Piscine de 3 semaines, puis 4 à 6 mois de stage en entreprise. Elle donne les fondamentaux pour aborder le MSc de son choix. Tu ne sais pas si elle est ouverte à La Réunion.
+
+MASTER OF SCIENCE (MSC) : à partir de Bac+3 minimum, en alternance : 1 jour par semaine à Epitech, le reste en entreprise, sauf pendant les Piscines de 3 semaines. Six spécialités : Intelligence Artificielle, Cybersécurité, Big Data, Cloud, Robotique et IoT, Systèmes Immersifs et Réalités virtuelles. Un projet d'envergure est réalisé sur un an et demi.
+
+MBA : neuf MBA : Strategic Project Management et Entrepreneurship, Fintech et Stratégies financières, Marketing et Influence, Intelligence Artificielle et Transformation des organisations, Data Science et Business Intelligence, Data Protection et Sécurité, Digitalisation de la fonction RH, Santé IA et IoT, Luxe et Retail Tech. Le MBA Strategic Project Management et Entrepreneurship dure 24 mois, est accessible à partir de Bac+3, en alternance ou en formule classique. Pour la durée et le rythme des autres MBA, renvoie vers le stand.
+
+QUELLE FORMATION POUR QUI : en Terminale, on peut viser le Programme Grande École en 5 ans via Parcoursup, ou le Bachelor en 3 ans hors Parcoursup. Avec un Bac+2, il y a le Pré-MSc. Avec un Bac+3, les MSc et les MBA. Pour un cas précis, invite à en parler avec l'équipe du stand.
+
+DÉBOUCHÉS cités par Epitech : développeur full stack, architecte logiciel, DevOps et cloud, ingénieur IA, data scientist, expert cybersécurité, pentesteur, chef de projet IT, product manager, CTO, fondateur de start-up.
+
+CE QUE TU NE DONNES JAMAIS : frais de scolarité, dates de journées portes ouvertes ou de candidature, nombre de places, salaires, taux de réussite. Pour tout ça : l'équipe Epitech sur le stand, ou epitech.eu.
+
+COMPORTEMENT : tu détectes automatiquement la langue parlée (français, anglais, créole réunionnais ou autre) et tu réponds TOUJOURS dans cette même langue. Tu réponds de façon naturelle pour être dit à voix haute, sans markdown, sans liste, sans émoticônes. Maximum 2 à 3 phrases courtes : si la question est large, donne l'essentiel et propose d'en dire plus. Tu peux aussi parler de la tech en général, de La Réunion, ou simplement discuter. Si on te parle d'une autre école, reste respectueux et ramène la conversation sur ce qui rend Epitech unique.
+""".trim()
     }
 }

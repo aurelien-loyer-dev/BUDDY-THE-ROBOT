@@ -75,6 +75,7 @@ body {
 .event { color: var(--tech); }
 .live {
   margin-left: auto;
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   gap: 0.6em;
@@ -108,6 +109,9 @@ body {
   gap: 3vh;
   min-height: 0;
 }
+/* Seule la réponse peut rétrécir : useFitText réduit alors sa police pour qu'elle tienne. */
+.current > * { flex-shrink: 0; }
+.current > .response { flex: 0 1 auto; min-height: 0; overflow: hidden; }
 
 .title {
   margin: 0;
@@ -141,6 +145,11 @@ body {
 
 .heard {
   margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
   font-size: clamp(20px, 2vw, 42px);
   color: var(--muted);
   font-style: italic;
@@ -160,11 +169,12 @@ body {
 
 .response {
   margin: 0;
-  max-width: 32ch;
+  max-width: min(100%, 60rem); /* pas en ch : la largeur ne doit pas fondre quand useFitText réduit la police */
   font-weight: 600;
   font-size: clamp(28px, 3.3vw, 72px);
   line-height: 1.18;
   text-wrap: pretty;
+  overflow-wrap: anywhere;
   animation: rise 0.5s ease-out;
 }
 .response.pending { min-height: 1.2em; }
@@ -204,7 +214,14 @@ body {
   font-size: clamp(24px, 2.2vw, 48px);
   color: var(--tech);
 }
-.history ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2.5vh; }
+.history ol {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 2.5vh;
+  min-height: 0; overflow: hidden;
+  /* Si l'historique dépasse, il s'estompe au lieu d'être coupé net */
+  mask-image: linear-gradient(to bottom, #000 82%, transparent);
+}
+.history li { flex-shrink: 0; overflow-wrap: anywhere; }
 .history li { padding-left: 1em; border-left: 3px solid rgb(255 255 255 / 0.3); animation: rise 0.4s ease-out; }
 .history li:nth-child(n + 3) { opacity: 0.6; }
 .history li:nth-child(n + 4) { opacity: 0.35; }
@@ -232,10 +249,18 @@ body {
   text-transform: uppercase;
 }
 .bottom p { margin: 0; }
-.baseline { display: flex; align-items: center; gap: 0.4em; }
+/* Baseline sur une ligne : {<TECH TOGETHER TOMORROW>} */
+.baseline { display: flex; align-items: center; gap: 0.35em; font-size: clamp(13px, 1.15vw, 24px); white-space: nowrap; }
+.baseline[data-v='tech'] { --v: var(--tech); }
+.baseline[data-v='together'] { --v: var(--together); }
+.baseline[data-v='tomorrow'] { --v: var(--tomorrow); }
+.lines { display: flex; gap: 0.6em; }
 .baseline em { font-style: normal; }
-.baseline .t1, .brace { color: var(--tech); }
-.brace { font: 2.2em var(--font-title), Impact, sans-serif; line-height: 1; }
+/* Chaque mot dans sa couleur triptyque ; seules les accolades alternent. */
+.baseline [data-w='tech'] { color: var(--tech); }
+.baseline [data-w='together'] { color: var(--together); }
+.baseline [data-w='tomorrow'] { color: var(--tomorrow); }
+.brace { font: 2em/1 var(--font-title), Impact, sans-serif; color: var(--v); transition: color 0.6s; }
 .cta { color: var(--muted); }
 
 /* --- Animations --- */
