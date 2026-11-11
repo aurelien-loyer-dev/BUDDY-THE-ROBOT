@@ -24,9 +24,6 @@ Une fois `buddy.ip=<ip_du_robot>` renseigné dans `local.properties` (ou via `BU
 | `./buddy screen` | ouvre `http://<ip>:8080/` dans le navigateur |
 
 Pourquoi `restart` passe par un reboot : BuddyCore refuse un lancement via `adb shell am start` (log « The activity will be restarted by companion », puis déconnexion du SDK). Le seul relancement fiable est donc un reboot, puisque l'app est configurée en `Autostart: true`.
-
-Pas de Docker : rien ne tourne côté Mac pendant le salon (l'app et l'écran sont servis par le robot), et une image contenant le SDK Android, Gradle, Node et les identifiants BFR serait lourde pour le même résultat.
-
 ## Fonctionnalités
 
 Buddy reste immobile. `MainActivity` fait tourner un robot conversationnel :

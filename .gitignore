@@ -6,6 +6,7 @@
 
 # Local config (contient les identifiants du repo Maven privé BFR)
 local.properties
+gradle-daemon-jvm.properties
 
 # Android Studio / IntelliJ
 *.iml
