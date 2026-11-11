@@ -60,6 +60,10 @@ adb -s <ip>:5555 reboot
 
 Le champ `companionMode: autonomous` évoqué dans certains guides BFR n'existe pas dans le SDK réel (`CompanionMode` n'a que `NORMAL`/`EMPTY`, confirmé par décompilation) et aucune autre appli du device ne l'utilise — retiré ici. Le hotword "Ok Buddy" (moteur Cerence/VoCon) qui coupait l'app est géré côté code via `BuddySDK.Speech.unloadVoCon()` dans `onSDKReady`.
 
+## Prononciation
+
+Buddy prononce parfois mal certains mots (noms propres, sigles). Le dictionnaire `PRONUNCIATIONS` dans `MainActivity.kt` remplace ces mots par une écriture phonétique, **uniquement dans le texte envoyé à la voix** : l'écran garde l'orthographe correcte. Pour corriger un mot, ajouter une ligne `"mot" to "écriture phonétique"` puis `./buddy deploy`. Les remplacements ignorent la casse, ne touchent que les mots entiers, et les entrées les plus longues passent en premier (`Pré-MSc` avant `MSc`).
+
 ## Écran de diffusion (Salon de l'Étudiant)
 
 Un écran annexe affiche en direct l'état de la conversation (écoute / réflexion / réponse, historique des derniers échanges, dernier marqueur scanné) — utile pour un public non-technique dans un salon bruyant qui ne sait pas toujours si Buddy a compris.

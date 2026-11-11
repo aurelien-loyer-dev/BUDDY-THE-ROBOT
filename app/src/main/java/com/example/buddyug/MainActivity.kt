@@ -225,7 +225,7 @@ class MainActivity : BuddyActivity() {
     private fun speak(text: String, onDone: () -> Unit) {
         isSpeaking.set(true)
         mainHandler.post { BuddySDK.UI.setMood(FacialExpression.HAPPY, 0.5, null) }
-        BuddySDK.Speech.startSpeaking(text, LabialExpression.SPEAK_NEUTRAL, object : ITTSCallback.Stub() {
+        BuddySDK.Speech.startSpeaking(forSpeech(text), LabialExpression.SPEAK_NEUTRAL, object : ITTSCallback.Stub() {
             override fun onSuccess(p0: String?) {
                 mainHandler.post { BuddySDK.UI.setMood(FacialExpression.NEUTRAL, 0.5, null) }
                 isSpeaking.set(false)
@@ -406,6 +406,36 @@ class MainActivity : BuddyActivity() {
         // Modèles dispo : curl https://api.groq.com/openai/v1/models -H "Authorization: Bearer <clé>"
         private const val GROQ_MODEL = "qwen/qwen3.8-27b"
         private const val GROQ_FALLBACK_MODEL = "openai/gpt-oss-120b"
+
+        /**
+         * Dictionnaire de prononciation : appliqué uniquement au texte envoyé à
+         * la synthèse vocale (l'écran garde l'orthographe correcte).
+         * Pour corriger un mot : ajouter une ligne `"mot" to "écriture phonétique"`,
+         * puis `./buddy deploy`. Insensible à la casse, mots entiers seulement ;
+         * les entrées les plus longues sont appliquées en premier.
+         */
+        private val PRONUNCIATIONS = mapOf(
+            "Epitech" to "Épitek",
+            "Pré-MSc" to "pré Master of Science",
+            "MSc" to "Master of Science",
+            "PGE" to "Programme Grande École",
+            "RNCP" to "R N C P",
+            "ECTS" to "E C T S",
+            "IoT" to "I O T",
+            "Bac+2" to "bac plus 2",
+            "Bac+3" to "bac plus 3",
+            "Bac+5" to "bac plus 5",
+        )
+
+        private val PRONUNCIATION_RULES = PRONUNCIATIONS.entries
+            .sortedByDescending { it.key.length }
+            .map { (word, spoken) ->
+                Regex("(?<![\\p{L}\\d])${Regex.escape(word)}(?![\\p{L}\\d])", RegexOption.IGNORE_CASE) to spoken
+            }
+
+        /** Texte tel qu'il doit être prononcé par Buddy. */
+        fun forSpeech(text: String): String =
+            PRONUNCIATION_RULES.fold(text) { acc, (regex, spoken) -> regex.replace(acc, Regex.escapeReplacement(spoken)) }
         private const val MAX_HISTORY_MESSAGES = 12
 
         /**
