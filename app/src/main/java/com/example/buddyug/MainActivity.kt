@@ -434,7 +434,7 @@ class MainActivity : BuddyActivity() {
     }
 
     private fun runQuizGame() = playGame("quiz") {
-        val items = QUIZ_ITEMS.shuffled().take(QUIZ_LENGTH)
+        val items = pickQuiz()
         val total = items.size
         val options = listOf("VRAI" to "Vrai", "FAUX" to "Faux")
         val intro = "C'est parti pour le quiz ! $total affirmations : montre-moi la carte Vrai ou la carte Faux."
@@ -582,6 +582,7 @@ class MainActivity : BuddyActivity() {
          */
         private val PRONUNCIATIONS = mapOf(
             "Epitech" to "Épitek",
+            "Parcoursup" to "Parcours supe", // sinon lu « parcoursoupe »
             "Pré-MSc" to "pré Master of Science",
             "MSc" to "Master of Science",
             "PGE" to "Programme Grande École",

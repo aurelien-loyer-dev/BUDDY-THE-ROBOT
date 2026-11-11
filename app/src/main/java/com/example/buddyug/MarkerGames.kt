@@ -98,23 +98,98 @@ data class QuizItem(val statement: String, val answer: Boolean, val explanation:
 
 const val QUIZ_LENGTH = 5
 
+/** Tire [QUIZ_LENGTH] affirmations au hasard, avec au moins une vraie et une fausse. */
+fun pickQuiz(): List<QuizItem> {
+    while (true) {
+        val pick = QUIZ_ITEMS.shuffled().take(QUIZ_LENGTH)
+        if (pick.any { it.answer } && pick.any { !it.answer }) return pick
+    }
+}
+
+// Epitech : uniquement des faits vérifiés sur epitech.eu (voir SYSTEM_PROMPT).
+// Culture tech : uniquement des faits établis, sans ambiguïté.
 val QUIZ_ITEMS = listOf(
+    // --- Epitech : admission ---
     QuizItem("À Epitech, il faut déjà savoir coder pour entrer.", false,
         "Aucun prérequis en programmation : la motivation compte plus que le niveau de départ."),
     QuizItem("Le Programme Grande École se rejoint via Parcoursup.", true,
         "En un seul vœu, avec un concours où l'entretien de motivation compte le plus."),
     QuizItem("Le Bachelor Epitech passe aussi par Parcoursup.", false,
         "Le Bachelor est hors Parcoursup : on dépose sa candidature et on passe un entretien."),
+    QuizItem("Au concours du Programme Grande École, l'épreuve qui compte le plus est l'entretien de motivation.", true,
+        "Il y a aussi un test de logique, un QCM d'anglais et un questionnaire de culture tech."),
+    QuizItem("Le concours du Programme Grande École comporte un QCM d'anglais.", true,
+        "À côté de l'entretien de motivation, du test de logique et du questionnaire de culture tech."),
+    QuizItem("Le Programme Grande École n'accepte que les bacs généraux.", false,
+        "Il est ouvert aux Terminales générales, technologiques et professionnelles."),
+    QuizItem("Pour entrer en Master of Science, le bac suffit.", false,
+        "Il faut au minimum un Bac+3."),
+    QuizItem("Le Pré-MSc s'adresse aux personnes qui ont un Bac+2.", true,
+        "Une année de mise à niveau pour ensuite rejoindre un Master of Science."),
+    // --- Epitech : formations ---
+    QuizItem("Le Programme Grande École dure 5 ans après le bac.", true,
+        "Et il mène au diplôme d'Expert en technologies de l'information, niveau Bac+5."),
+    QuizItem("Le Bachelor Epitech dure 5 ans.", false,
+        "Le Bachelor dure 3 ans. C'est le Programme Grande École qui dure 5 ans."),
+    QuizItem("En 3e année de Bachelor, on est en alternance.", true,
+        "Un an en alternance en France, pour finir le Bachelor en entreprise."),
+    QuizItem("Il existe un Bachelor Cybersécurité à Epitech.", true,
+        "À côté du Bachelor Intelligence Artificielle et du Bachelor Concepteur Développeur d'applications."),
+    QuizItem("Les Master of Science Epitech se font en alternance.", true,
+        "Un jour par semaine à l'école, le reste en entreprise."),
+    QuizItem("Epitech propose un Master of Science Robotique et IoT.", true,
+        "Parmi six spécialités, dont l'IA, la cybersécurité, le Big Data et le Cloud."),
+    QuizItem("Au Programme Grande École, la majeure se choisit entre IA, Cybersécurité et Ingénierie logicielle.", true,
+        "La majeure se fait en 5e année."),
+    // --- Epitech : déroulé ---
     QuizItem("À Epitech, il y a des cours magistraux en amphi tous les jours.", false,
         "La pédagogie est par projets, sans cours magistraux."),
-    QuizItem("Au Programme Grande École, on part à l'international en 4e année.", true,
-        "Une année complète à l'étranger, ou un stage plus un semestre à l'étranger."),
-    QuizItem("Le Hub du campus de Saint-André a des imprimantes 3D.", true,
-        "Il en a cinq, en plus des bras robotiques et des voitures autonomes."),
-    QuizItem("Les MSc Epitech se font en alternance.", true,
-        "Un jour par semaine à l'école, le reste en entreprise."),
     QuizItem("La Piscine d'Epitech, c'est un cours de natation.", false,
         "C'est un bootcamp intensif d'immersion totale dans le code."),
+    QuizItem("La Piscine du Programme Grande École dure une seule journée.", false,
+        "Elle dure 5 semaines, en début de première année."),
+    QuizItem("Au Programme Grande École, on part à l'international en 4e année.", true,
+        "Une année complète à l'étranger, ou un stage plus un semestre à l'étranger."),
+    QuizItem("Au Programme Grande École, on ne va jamais en entreprise avant la fin des études.", false,
+        "Dès la 2e année, il y a un premier stage rémunéré de 4 à 6 mois."),
+    QuizItem("La 5e année du Programme Grande École se passe à La Réunion.", false,
+        "Elle se déroule sur le campus de Paris."),
+    // --- Epitech : La Réunion ---
+    QuizItem("Le campus Epitech de La Réunion est à Saint-Denis.", false,
+        "Il est à Saint-André, sur la côte est de l'île."),
+    QuizItem("Epitech est implantée à La Réunion depuis 2017.", true,
+        "Sur le campus de Saint-André."),
+    QuizItem("Epitech a 15 campus en France.", true,
+        "Dont celui de Saint-André, à La Réunion."),
+    QuizItem("Le Hub du campus de Saint-André a des imprimantes 3D.", true,
+        "Il en a cinq, en plus des bras robotiques et des voitures autonomes."),
+    QuizItem("Au Hub, il y a un espace pour les voitures autonomes.", true,
+        "L'espace Robocar, pour des voitures autonomes pilotées par IA."),
+    // --- Culture tech ---
     QuizItem("Un octet, c'est 8 bits.", true,
         "Et avec 8 bits, on peut écrire 256 valeurs différentes."),
+    QuizItem("Le binaire n'utilise que les chiffres 0 et 1.", true,
+        "C'est la base de tout ce que calcule un ordinateur."),
+    QuizItem("En binaire, 10 vaut dix.", false,
+        "En binaire, 10 vaut deux."),
+    QuizItem("Le langage Python doit son nom au serpent.", false,
+        "Il doit son nom aux Monty Python, une troupe d'humoristes britanniques."),
+    QuizItem("HTML sert à structurer les pages web.", true,
+        "Et CSS sert à les mettre en forme."),
+    QuizItem("CSS sert à stocker les mots de passe d'un site.", false,
+        "CSS sert à mettre en forme les pages web : couleurs, tailles, mise en page."),
+    QuizItem("Android repose sur le noyau Linux.", true,
+        "Moi aussi d'ailleurs : je tourne sous Android."),
+    QuizItem("Ada Lovelace est considérée comme l'une des premières programmeuses de l'histoire.", true,
+        "Au 19e siècle, elle a écrit un programme pour une machine à calculer."),
+    QuizItem("Le phishing, c'est un faux message qui imite une source de confiance pour voler des informations.", true,
+        "Toujours vérifier l'expéditeur avant de cliquer sur un lien."),
+    QuizItem("Un mot de passe de 4 chiffres est aussi sûr qu'une longue phrase de passe.", false,
+        "Plus un mot de passe est long, plus il est difficile à deviner."),
+    QuizItem("Le code source d'un logiciel open source peut être consulté par tout le monde.", true,
+        "C'est même le principe de l'open source."),
+    QuizItem("Une IA comme moi ne se trompe jamais.", false,
+        "Je prédis des réponses à partir de ce que j'ai appris, et je peux me tromper."),
+    QuizItem("Le bug de l'an 2000 venait de dates stockées avec seulement 2 chiffres pour l'année.", true,
+        "En passant de 99 à 00, certains programmes croyaient revenir en 1900."),
 )

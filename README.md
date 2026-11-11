@@ -128,7 +128,7 @@ Deux jeux, lancés en montrant une carte à Buddy. Les cartes sont dans `cards/c
 | 10, 11 | VRAI, FAUX (réponses du Quiz) |
 
 - **Profil tech** : 4 questions, réponses avec A/B/C/D. Le résultat est l'un de 4 profils (Cybersécurité, IA et Data, Dev et Création, Robotique et IoT), chacun relié aux formations Epitech correspondantes.
-- **Quiz Vrai ou Faux** : 5 affirmations tirées au hasard, avec la bonne réponse et une explication après chaque carte. Le score final est comparé au record du jour, qui est gardé en mémoire et remis à zéro quand l'app redémarre.
+- **Quiz Vrai ou Faux** : 5 affirmations tirées au hasard parmi 39 (Epitech et culture tech), avec toujours au moins une vraie et une fausse, avec la bonne réponse et une explication après chaque carte. Le score final est comparé au record du jour, qui est gardé en mémoire et remis à zéro quand l'app redémarre.
 - **Pendant une partie** : la conversation vocale est en pause, et l'écran affiche la question, les cartes possibles et le résultat (champ `game` du message WebSocket).
 - **Fin de partie** : sans réponse au bout de 25 s, Buddy abandonne la partie et reprend la conversation.
 - **Une carte levée ne compte qu'une fois** : il faut la retirer environ 1 s avant de pouvoir la rejouer. Sinon, une carte restée levée répondrait aussi à la question suivante.
