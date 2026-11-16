@@ -52,6 +52,7 @@ android {
 
     buildFeatures {
         buildConfig = true
+        resValues = true
     }
 
     buildTypes {

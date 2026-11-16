@@ -10,7 +10,7 @@ const mono = Space_Mono({ weight: ['400', '700'], subsets: ['latin'], variable: 
 
 export const metadata: Metadata = {
   title: 'Buddy — Epitech La Réunion',
-  description: 'Transcription en direct des échanges avec Buddy, le robot d'Epitech La Réunion.',
+  description: 'Transcription en direct des échanges avec Buddy, le robot d’Epitech La Réunion.',
 }
 
 export const viewport: Viewport = { themeColor: '#013afb' }
