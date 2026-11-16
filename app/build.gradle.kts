@@ -34,6 +34,22 @@ android {
         ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~"
     }
 
+    // Un flavor par événement : même code, contenu différent (EventConfig.kt
+    // dans app/src/<flavor>/). Les deux apps s'installent côte à côte sur Buddy.
+    flavorDimensions += "event"
+    productFlavors {
+        create("salon") {
+            dimension = "event"
+            // Garde l'applicationId historique : met à jour l'app déjà installée.
+            resValue("string", "app_name", "Buddy Salon")
+        }
+        create("jpo") {
+            dimension = "event"
+            applicationIdSuffix = ".jpo"
+            resValue("string", "app_name", "Buddy JPO")
+        }
+    }
+
     buildFeatures {
         buildConfig = true
     }

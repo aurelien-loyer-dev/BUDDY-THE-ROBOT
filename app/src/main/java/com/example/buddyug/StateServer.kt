@@ -7,7 +7,7 @@ import org.json.JSONObject
 import java.io.IOException
 
 /**
- * Serveur HTTP + WebSocket embarqué pour l'écran de diffusion du salon.
+ * Serveur HTTP + WebSocket embarqué pour l'écran de diffusion.
  *
  * Sert la page Next.js exportée en statique (`assets/web/`, build : `cd display && npm run android`) et diffuse en direct l'état
  * de la conversation (écoute / réflexion / parole, texte entendu, réponse,
@@ -23,6 +23,7 @@ class StateServer(private val context: Context, port: Int) : NanoWSD(port) {
         put("heard", JSONObject.NULL)
         put("response", JSONObject.NULL)
         put("marker", JSONObject.NULL)
+        put("event", EventConfig.SCREEN_LABEL)
     }
 
     fun broadcast(update: JSONObject) {

@@ -28,6 +28,8 @@ export interface BuddyUpdate {
   marker: number | null
   game: Game | null
   timestamp: number
+  /** Nom de l'événement affiché en haut (EventConfig.SCREEN_LABEL du flavor). */
+  event?: string
 }
 
 export interface Exchange {

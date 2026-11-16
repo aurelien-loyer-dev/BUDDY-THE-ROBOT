@@ -79,7 +79,7 @@ export default function Page() {
         {/* Logo officiel, non modifié (charte : version blanche sur fond bleu). */}
         <img className="logo" src="/epitech-logo.svg" alt="Epitech" />
         <span className="org">La Réunion</span>
-        <span className="event">&lt;Salon de l’Étudiant/&gt;</span>
+        <span className="event">&lt;{update.event ?? 'Salon de l’Étudiant'}/&gt;</span>
         <span className={`live ${connected ? 'on' : ''}`}>{connected ? 'En direct' : 'Connexion…'}</span>
       </header>
 

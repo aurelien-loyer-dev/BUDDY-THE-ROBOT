@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
-# Pilotage de Buddy depuis le Mac : ./buddy deploy|restart|logs|status|screen
+# Pilotage de Buddy depuis le Mac : ./buddy deploy|restart|logs|status|screen [salon|jpo]
 # IP du robot : buddy.ip=<ip> dans local.properties (ou variable BUDDY_IP).
+# Événement : 2e argument, ou variable BUDDY_EVENT (par défaut : salon).
 set -euo pipefail
 cd "$(dirname "$0")"
 
-PKG=com.example.buddyug
+EVENT="${2:-${BUDDY_EVENT:-salon}}"
+case "$EVENT" in
+  salon) PKG=com.example.buddyug; GRADLE_TASK=installSalonDebug ;;
+  jpo)   PKG=com.example.buddyug.jpo; GRADLE_TASK=installJpoDebug ;;
+  *) echo "Événement inconnu : $EVENT (salon ou jpo)"; exit 1 ;;
+esac
+# applicationIdSuffix change le package, pas le nom de la classe Kotlin.
+ACTIVITY=com.example.buddyug.MainActivity
 PORT=8080
 IP="${BUDDY_IP:-$(sed -n 's/^buddy\.ip=//p' local.properties 2>/dev/null | tr -d '[:space:]')}"
 [ -n "$IP" ] || { echo "IP de Buddy inconnue : ajoute buddy.ip=<ip> dans local.properties (ou BUDDY_IP=<ip> ./buddy ...)"; exit 1; }
@@ -39,11 +47,13 @@ wait_ready() {
 # Le Companion crée alors sa mission et donne le focus à l'app (~1 s).
 restart() {
   connect
-  echo "Relance de l'app..."
-  adb -s "$DEV" shell am force-stop "$PKG"
+  echo "Relance de l'app ($EVENT)..."
+  # Une seule app à la fois : le port $PORT est partagé entre salon et JPO.
+  adb -s "$DEV" shell am force-stop com.example.buddyug
+  adb -s "$DEV" shell am force-stop com.example.buddyug.jpo
   adb -s "$DEV" shell am start -n com.bfr.buddy.companion/com.bfr.buddy.utils.ActivityLauncher \
     --es ActivityResultTracker_packageName_to_launch "$PKG" \
-    --es ActivityResultTracker_activityName_to_launch "$PKG.MainActivity" \
+    --es ActivityResultTracker_activityName_to_launch "$ACTIVITY" \
     --ez ActivityResultTracker_should_launch_with_isLockTask false >/dev/null
   wait_ready
 }
@@ -66,7 +76,7 @@ case "${1:-}" in
   deploy)
     connect
     (cd display && { [ -d node_modules ] || npm install; } && npm run android)
-    ./gradlew installDebug -q
+    ./gradlew "$GRADLE_TASK" -q
     restart
     open_screen
     ;;
@@ -79,6 +89,7 @@ case "${1:-}" in
   status)
     connect
     echo "Robot   : connecté ($DEV)"
+    echo "Événement : $EVENT ($PKG)"
     pid=$(adb -s "$DEV" shell pidof "$PKG" | tr -d '\r' || true)
     if [ -n "$pid" ]; then echo "App     : lancée (pid $pid)"; else echo "App     : arrêtée"; fi
     code=$(curl -s -m 3 -o /dev/null -w '%{http_code}' "$URL" || true)
@@ -87,7 +98,7 @@ case "${1:-}" in
   screen) open_screen ;;
   *)
     cat <<EOF
-Usage : ./buddy <commande>
+Usage : ./buddy <commande> [salon|jpo]   (défaut : salon, ou \$BUDDY_EVENT)
   deploy   build écran + APK, installe, relance l'app, ouvre l'écran
   restart  relance l'app (sans redémarrer le robot) et attend qu'elle soit prête
   reboot   redémarre tout le robot (à garder pour les cas bloqués, sur secteur)

@@ -1,6 +1,20 @@
 # BUDDY-THE-ROBOT
 
-App Android pour le robot Buddy (Blue Frog Robotics), sous BuddyOS (Android 9), utilisée comme mascotte du stand Epitech La Réunion au **Salon de l'Étudiant**.
+App Android pour le robot Buddy (Blue Frog Robotics), sous BuddyOS (Android 9), utilisée comme mascotte d'Epitech La Réunion au **Salon de l'Étudiant** et aux **Journées Portes Ouvertes**.
+
+## Deux apps : salon et JPO (product flavors)
+
+Une seule base de code, deux apps installables côte à côte sur Buddy :
+
+| Flavor | applicationId | Nom sur Buddy | Contenu propre |
+|---|---|---|---|
+| `salon` | `com.example.buddyug` | Buddy Salon | `app/src/salon/java/.../EventConfig.kt` |
+| `jpo` | `com.example.buddyug.jpo` | Buddy JPO | `app/src/jpo/java/.../EventConfig.kt` |
+
+- `EventConfig.kt` : contexte du prompt (où est Buddy), accueil vocal, phrases de repli, libellé en haut de l'écran de diffusion.
+- Tout le reste est commun (`app/src/main/`) : boucle Q&A, jeux, infos Epitech (`SystemPrompt.kt`), écran. Un correctif dans `main` profite aux deux.
+- Pour rendre un autre élément propre à un événement (ex. les jeux de `MarkerGames.kt`), déplacer le fichier de `main/` vers `salon/` **et** `jpo/` (une copie par flavor).
+- Les deux apps utilisent le port 8080 : une seule doit tourner à la fois. `./buddy restart` arrête les deux avant de lancer la bonne. Pense à choisir dans le Companion BuddyOS quelle app démarre automatiquement.
 
 ## Setup
 
@@ -17,12 +31,14 @@ Une fois `buddy.ip=<ip_du_robot>` renseigné dans `local.properties` (ou via `BU
 
 | Commande | Effet |
 |---|---|
-| `./buddy deploy` | build de l'écran Next.js + APK, installation, relance de l'app, attente qu'elle réponde, ouverture de l'écran |
+| `./buddy deploy [salon\|jpo]` | build de l'écran Next.js + APK, installation, relance de l'app, attente qu'elle réponde, ouverture de l'écran |
 | `./buddy restart` | relance l'app sans redémarrer le robot (~5 s) |
 | `./buddy reboot` | redémarre tout le robot, pour les cas bloqués (~1 min, **sur secteur**) |
 | `./buddy status` | robot connecté ? app lancée ? écran joignable ? |
 | `./buddy logs` | logs de l'app en direct (Ctrl+C pour quitter) |
 | `./buddy screen` | ouvre `http://<ip>:8080/` dans le navigateur |
+
+Toutes les commandes prennent l'événement en 2e argument (`./buddy deploy jpo`, `./buddy restart jpo`…), ou via `BUDDY_EVENT=jpo`. Par défaut : `salon`.
 
 Comment `restart` relance l'app : BuddyCore refuse un `adb shell am start` direct de `MainActivity` (log « The activity will be restarted by companion », puis déconnexion du SDK). Au boot, le Companion ne lance pas l'app directement : il passe par son activité relais exportée `com.bfr.buddy.companion/com.bfr.buddy.utils.ActivityLauncher`, avec les extras `ActivityResultTracker_packageName_to_launch`, `ActivityResultTracker_activityName_to_launch` et `ActivityResultTracker_should_launch_with_isLockTask`. `restart` fait pareil après un `force-stop` : le Companion crée sa mission, donne le focus à l'app, et elle démarre normalement.
 
@@ -31,7 +47,7 @@ Comment `restart` relance l'app : BuddyCore refuse un `adb shell am start` direc
 
 Buddy reste immobile. `MainActivity` fait tourner un robot conversationnel :
 
-- **Q&A vocal** : boucle STT (Google, français) → [Groq](https://groq.com) (`qwen/qwen3.8-27b`, constante `GROQ_MODEL` ; `llama-3.3-70b-versatile` a été retiré de Groq en 2026) → TTS, avec historique de conversation. Le prompt système (`askGroq` dans `MainActivity.kt`) cible les lycéens, les étudiants en réorientation et leurs parents : présentation d'Epitech et du Hub, débouchés, ton tutoyant et motivant, réponse dans la langue du visiteur (français, anglais, créole…), 2-3 phrases maximum. **Il interdit d'inventer des chiffres** (tarifs, dates, places, salaires) : pour tout ce qui est administratif, Buddy renvoie vers l'équipe du stand ou epitech.eu. C'est le premier endroit à modifier pour un autre événement.
+- **Q&A vocal** : boucle STT (Google, français) → [Groq](https://groq.com) (`qwen/qwen3.8-27b`, constante `GROQ_MODEL` ; `llama-3.3-70b-versatile` a été retiré de Groq en 2026) → TTS, avec historique de conversation. Le prompt système (`SystemPrompt.kt` + `EventConfig.kt` du flavor) cible les lycéens, les étudiants en réorientation et leurs parents : présentation d'Epitech et du Hub, débouchés, ton tutoyant et motivant, réponse dans la langue du visiteur (français, anglais, créole…), 2-3 phrases maximum. **Il interdit d'inventer des chiffres** (tarifs, dates, places, salaires) : pour tout ce qui est administratif, Buddy renvoie vers l'équipe du stand ou epitech.eu. Pour un autre événement : nouveau flavor + son `EventConfig.kt`.
 - **Jeux à marqueurs** : Profil tech et Quiz Vrai ou Faux, joués avec des cartes ArUco (voir la section dédiée plus bas).
 - **Scan de marqueurs ArUco** : `BuddySDK.Vision.getListOfArucos(ArucoDictionary.DICT_4X4_50)` en polling (400ms), confirmation sur 3 détections consécutives pour éviter les faux positifs, le numéro détecté est diffusé à l'écran (l'annonce vocale est actuellement vide, donc désactivée). Voir les commentaires dans `MainActivity.kt` pour l'historique du diagnostic (dictionnaire, permission `VISION`, tracker de personnes concurrent).
 - **Écran de diffusion en direct** (`display/`) : un mini-serveur HTTP + WebSocket embarqué (`StateServer.kt`, NanoHTTPD) sert une page Next.js qui affiche en direct ce que Buddy entend/répond, pour un écran annexe au stand du salon. Voir la section dédiée plus bas.
