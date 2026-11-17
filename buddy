@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pilotage de Buddy depuis le Mac : ./buddy deploy|restart|logs|status|screen [salon|jpo]
+# Pilotage de Buddy depuis le Mac : ./buddy deploy|restart|logs|status|screen [salon|jpo|balade]
 # IP du robot : buddy.ip=<ip> dans local.properties (ou variable BUDDY_IP).
 # Événement : 2e argument, ou variable BUDDY_EVENT (par défaut : salon).
 set -euo pipefail
@@ -9,7 +9,8 @@ EVENT="${2:-${BUDDY_EVENT:-salon}}"
 case "$EVENT" in
   salon) PKG=com.example.buddyug; GRADLE_TASK=installSalonDebug ;;
   jpo)   PKG=com.example.buddyug.jpo; GRADLE_TASK=installJpoDebug ;;
-  *) echo "Événement inconnu : $EVENT (salon ou jpo)"; exit 1 ;;
+  balade) PKG=com.example.buddyug.balade; GRADLE_TASK=installBaladeDebug ;;
+  *) echo "Événement inconnu : $EVENT (salon, jpo ou balade)"; exit 1 ;;
 esac
 # applicationIdSuffix change le package, pas le nom de la classe Kotlin.
 ACTIVITY=com.example.buddyug.MainActivity
@@ -51,6 +52,7 @@ restart() {
   # Une seule app à la fois : le port $PORT est partagé entre salon et JPO.
   adb -s "$DEV" shell am force-stop com.example.buddyug
   adb -s "$DEV" shell am force-stop com.example.buddyug.jpo
+  adb -s "$DEV" shell am force-stop com.example.buddyug.balade
   adb -s "$DEV" shell am start -n com.bfr.buddy.companion/com.bfr.buddy.utils.ActivityLauncher \
     --es ActivityResultTracker_packageName_to_launch "$PKG" \
     --es ActivityResultTracker_activityName_to_launch "$ACTIVITY" \
@@ -98,7 +100,7 @@ case "${1:-}" in
   screen) open_screen ;;
   *)
     cat <<EOF
-Usage : ./buddy <commande> [salon|jpo]   (défaut : salon, ou \$BUDDY_EVENT)
+Usage : ./buddy <commande> [salon|jpo|balade]   (défaut : salon, ou \$BUDDY_EVENT)
   deploy   build écran + APK, installe, relance l'app, ouvre l'écran
   restart  relance l'app (sans redémarrer le robot) et attend qu'elle soit prête
   reboot   redémarre tout le robot (à garder pour les cas bloqués, sur secteur)

@@ -10,11 +10,13 @@ Une seule base de code, deux apps installables côte à côte sur Buddy :
 |---|---|---|---|
 | `salon` | `com.example.buddyug` | Buddy Salon | `app/src/salon/java/.../EventConfig.kt` |
 | `jpo` | `com.example.buddyug.jpo` | Buddy JPO | `app/src/jpo/java/.../EventConfig.kt` |
+| `balade` | `com.example.buddyug.balade` | Buddy Balade | `app/src/balade/java/.../EventConfig.kt` + `Wanderer.kt` |
 
 - `EventConfig.kt` : contexte du prompt (où est Buddy), accueil vocal, phrases de repli, libellé en haut de l'écran de diffusion.
 - Tout le reste est commun (`app/src/main/`) : boucle Q&A, jeux, infos Epitech (`SystemPrompt.kt`), écran. Un correctif dans `main` profite aux deux.
 - Pour rendre un autre élément propre à un événement (ex. les jeux de `MarkerGames.kt`), déplacer le fichier de `main/` vers `salon/` **et** `jpo/` (une copie par flavor).
-- Les deux apps utilisent le port 8080 : une seule doit tourner à la fois. `./buddy restart` arrête les deux avant de lancer la bonne. Pense à choisir dans le Companion BuddyOS quelle app démarre automatiquement.
+- **Mode balade** (`Wanderer.kt`) : Buddy démarre **à l'arrêt**. Toucher le haut de la tête ou dire « va te promener » le lance ; « arrête-toi » ou un nouveau toucher l'arrête. Il roule au hasard, s'arrête à 1 m de tout obstacle (ToF + ultrasons) et fait demi-tour devant un vide. Quand on lui parle, il s'arrête, cherche la personne à la caméra et se tourne vers elle, puis reprend la balade après 20 s de silence. « Suis-moi » : il suit la personne détectée, toujours à 1 m minimum. Pas de jeux à cartes dans ce mode (la caméra sert à repérer les personnes). Réglages (vitesses, distance, sens de rotation) : `companion object` de `Wanderer.kt`.
+- Les apps utilisent toutes le port 8080 : une seule doit tourner à la fois. `./buddy restart` arrête les deux avant de lancer la bonne. Pense à choisir dans le Companion BuddyOS quelle app démarre automatiquement.
 
 ## Setup
 

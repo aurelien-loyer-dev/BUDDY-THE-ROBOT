@@ -8,6 +8,9 @@ package com.example.buddyug
  * si le changement ne concerne que la JPO).
  */
 object EventConfig {
+    /** Mode balade (déplacement aléatoire) : uniquement dans le flavor balade. */
+    const val WANDER = false
+
     /** Affiché en haut de l'écran de diffusion : <Portes ouvertes/>. */
     const val SCREEN_LABEL = "Portes ouvertes"
 

@@ -5,6 +5,9 @@ package com.example.buddyug
  * Le code et les infos Epitech communes sont dans app/src/main/.
  */
 object EventConfig {
+    /** Mode balade (déplacement aléatoire) : uniquement dans le flavor balade. */
+    const val WANDER = false
+
     /** Affiché en haut de l'écran de diffusion : <Salon de l’Étudiant/>. */
     const val SCREEN_LABEL = "Salon de l’Étudiant"
 

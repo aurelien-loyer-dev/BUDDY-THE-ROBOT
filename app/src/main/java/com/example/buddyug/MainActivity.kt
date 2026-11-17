@@ -59,24 +59,46 @@ class MainActivity : BuddyActivity() {
     private var bestQuizScore = 0
 
     private var stateServer: StateServer? = null
+    private var wanderer: Wanderer? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        // BuddyOS recrée souvent l'activité ; l'ancienne n'est détruite qu'APRÈS la
+        // création de la nouvelle. Seule l'activité courante pilote la caméra, le
+        // serveur d'écran et la balade (partagés entre instances, voir companion).
+        current = this
     }
 
     override fun onResume() {
         super.onResume()
         isPaused = false
+        wanderer?.resume()
     }
 
     override fun onPause() {
         super.onPause()
         isPaused = true
+        // Une autre app ou le Companion passe devant : Buddy ne roule pas sans nous,
+        // mais il garde son mode et le reprend au retour (onResume).
+        // Ancienne instance qui se met en pause après la création de la nouvelle : on ne touche à rien.
+        if (current === this) wanderer?.pause()
     }
 
     override fun onDestroy() {
         arucoScanningActive = false
+        if (current !== this) {
+            // Ancienne instance détruite après la création de la nouvelle : surtout ne pas
+            // couper la caméra ni le serveur d'écran qu'utilise la nouvelle (bug du
+            // 2026-11-17 : « CAMERA NOT STARTED », port 8080 occupé, suivi aveugle).
+            Log.i(TAG, "Ancienne activité détruite : caméra, écran et balade gardés pour la nouvelle")
+            super.onDestroy()
+            return
+        }
+        current = null
+        sharedWanderer = null
+        sharedServer = null
+        wanderer?.stop()
         // Au lancement, le Companion détruit et recrée l'activité avant que le
         // SDK soit connecté : stopCamera() lève alors une NPE qui tue le process
         // et fait échouer la relance. On ne coupe la caméra que si le SDK est prêt.
@@ -115,6 +137,8 @@ class MainActivity : BuddyActivity() {
             Log.w(TAG, "unloadVoCon a échoué", e)
         }
 
+        wanderer?.onSdkReady()
+
         if (sdkInitialized) {
             Log.i(TAG, "onSDKReady rappelé, initialisation déjà faite — ignoré")
             return
@@ -122,14 +146,32 @@ class MainActivity : BuddyActivity() {
         sdkInitialized = true
 
         // Écran de diffusion : http://<ip_buddy>:8080/
-        try {
-            stateServer = StateServer(this, STATE_SERVER_PORT).also { it.start() }
-            Log.i(TAG, "StateServer démarré sur le port $STATE_SERVER_PORT")
+        // (repris de l'instance précédente si BuddyOS a recréé l'activité)
+        stateServer = sharedServer ?: try {
+            StateServer(applicationContext, STATE_SERVER_PORT).also {
+                it.start()
+                sharedServer = it
+                Log.i(TAG, "StateServer démarré sur le port $STATE_SERVER_PORT")
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Échec démarrage StateServer", e)
+            null
         }
 
-        startArucoScanner()
+        // Mode balade (flavor balade) : déplacement, discussion, « suis-moi ».
+        // Pas de scan ArUco en balade : la caméra sert à repérer les personnes.
+        if (EventConfig.WANDER) {
+            wanderer = sharedWanderer?.also {
+                Log.i(TAG, "Balade reprise de l'activité précédente (mode ${it.mode})")
+                it.onSdkReady()
+                it.resume()
+            } ?: Wanderer { mode ->
+                val mood = if (mode == Wanderer.Mode.SUIVI) FacialExpression.HAPPY else FacialExpression.NEUTRAL
+                Handler(Looper.getMainLooper()).post { BuddySDK.UI.setMood(mood, 0.5, null) }
+            }.also { it.start(); sharedWanderer = it }
+        } else {
+            startArucoScanner()
+        }
         Thread { startConversationLoop() }.start()
     }
 
@@ -303,6 +345,12 @@ class MainActivity : BuddyActivity() {
         speakSync(greeting)
 
         while (true) {
+            // L'activité a été remplacée par une nouvelle : sa propre boucle a pris le relais
+            // (sinon deux boucles se disputaient le micro et répondaient en double).
+            if (current !== this) {
+                Log.i(TAG, "Boucle de conversation de l'ancienne activité arrêtée")
+                return
+            }
             try {
                 if (isPaused) {
                     Thread.sleep(500)
@@ -327,13 +375,36 @@ class MainActivity : BuddyActivity() {
                     Thread.sleep(200)
                     continue
                 }
+                Log.i(TAG, "Entendu : « $heard »")
+                // Balade : commandes vocales (suis-moi, stop, balade), sinon Buddy
+                // s'arrête et se tourne vers la personne avant de répondre.
+                wanderer?.let { w ->
+                    val cmd = w.command(heard)
+                    if (cmd != null) {
+                        val reply = w.handle(cmd)
+                        broadcastState("speaking", heard = heard, response = reply)
+                        speakSync(reply)
+                        continue
+                    }
+                    w.onHeard()
+                }
                 broadcastState("thinking", heard = heard)
                 mainHandler.post { BuddySDK.UI.setMood(FacialExpression.THINKING, 0.5, null) }
-                val response = askGroq(heard)
+                var response = askGroq(heard)
+                // Balade : l'IA peut demander un mouvement avec une balise ([TOUR], [DANSE]…).
+                wanderer?.let { w ->
+                    val (action, text) = w.extractTag(response)
+                    if (action != null) {
+                        Log.i(TAG, "Action demandée par l'IA : $action")
+                        w.handle(action)
+                    }
+                    response = text
+                }
                 if (response.isNotBlank()) {
                     broadcastState("speaking", heard = heard, response = response)
                     speakSync(response)
                 }
+                wanderer?.onSpoke()
             } catch (e: Exception) {
                 // Filet de sécurité : une exception SDK isolée (ex: "Focus not
                 // owned" si une autre appli Buddy rafle une ressource au même
@@ -566,6 +637,12 @@ class MainActivity : BuddyActivity() {
 
     companion object {
         private const val TAG = "BuddyUG"
+
+        /** Activité au premier plan la plus récente (BuddyOS en recrée souvent une nouvelle). */
+        @Volatile private var current: MainActivity? = null
+        /** Partagés entre instances : survivent à la recréation de l'activité par BuddyOS. */
+        @Volatile private var sharedServer: StateServer? = null
+        @Volatile private var sharedWanderer: Wanderer? = null
         private const val ARUCO_POLL_INTERVAL_MS = 400L
         private const val ARUCO_COOLDOWN_MS = 5000L
         private const val ARUCO_CONFIRM_STREAK = 3

@@ -48,6 +48,11 @@ android {
             applicationIdSuffix = ".jpo"
             resValue("string", "app_name", "Buddy JPO")
         }
+        create("balade") {
+            dimension = "event"
+            applicationIdSuffix = ".balade"
+            resValue("string", "app_name", "Buddy Balade")
+        }
     }
 
     buildFeatures {
